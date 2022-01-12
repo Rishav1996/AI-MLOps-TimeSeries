@@ -1,8 +1,8 @@
-./__pycache__
-./idea
-./frontend/.idea
-./frontend/node_modules
-./backend/.idea
-./backend/__pycache__
-./visualization/.idea
-./visualization/__pycache__
+__pycache__
+.idea
+frontend/.idea
+frontend/node_modules
+backend/.idea
+backend/__pycache__
+visualization/.idea
+visualization/__pycache__

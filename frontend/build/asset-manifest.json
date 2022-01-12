@@ -1,0 +1,14 @@
+{
+  "files": {
+    "main.css": "/static/css/main.ae88cf25.css",
+    "main.js": "/static/js/main.b9c72bc1.js",
+    "static/media/time-series-logo.png": "/static/media/time-series-logo.f32323c9132d2663456d.png",
+    "index.html": "/index.html",
+    "main.ae88cf25.css.map": "/static/css/main.ae88cf25.css.map",
+    "main.b9c72bc1.js.map": "/static/js/main.b9c72bc1.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.ae88cf25.css",
+    "static/js/main.b9c72bc1.js"
+  ]
+}

@@ -1,0 +1,16 @@
+pmdarima
+tbats
+pastas
+adtk
+fastapi
+celery[redis]
+flower
+redis
+sqlalchemy
+gunicorn
+uvicorn[standard]
+pymysql
+rsa
+python-multipart
+eventlet
+requests
