@@ -6,3 +6,5 @@ backend/.idea
 backend/__pycache__
 visualization/.idea
 visualization/__pycache__
+frontend/package-lock.json
+frontend/yarn.lock
