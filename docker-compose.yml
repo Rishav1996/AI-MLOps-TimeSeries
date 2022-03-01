@@ -29,7 +29,7 @@ services:
 
   celery_data_processing:
     build: ./python_image
-    command: /home/conda/bin/celery -A data_processing.data_processing_pipeline worker --loglevel=INFO --autoscale=4,2 -Q data-processing-pipeline -E --without-gossip --without-mingle
+    command: /home/conda/bin/celery -A data_processing.data_processing_pipeline worker --loglevel=INFO --autoscale=1,1 -Q data-processing-pipeline -E --without-gossip --without-mingle
     image: python-image:1.0
     environment:
       - MKL_NUM_THREADS=1
@@ -63,7 +63,7 @@ services:
     networks:
       - internal-network
     deploy:
-      replicas: 1
+      replicas: 2
     volumes:
       - api_data:/app/
       - type: bind

@@ -13,6 +13,6 @@ WORKDIR /app/backend
 COPY . .
 RUN /home/conda/bin/conda init bash
 RUN /home/conda/bin/pip config set global.cache-dir false
-RUN /home/conda/bin/pip install -r requirements.txt --no-cache-dir
 RUN /home/conda/bin/conda install -c conda-forge --file requirements_conda.txt
+RUN /home/conda/bin/pip install -r requirements.txt --no-cache-dir
 RUN /home/conda/bin/conda clean -y -a

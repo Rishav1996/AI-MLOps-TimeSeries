@@ -1,2 +1,1 @@
-fbprophet
-sktime[all_extras]
+sktime-all-extras=0.9.0

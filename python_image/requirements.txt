@@ -1,6 +1,5 @@
 pmdarima
 tbats
-pastas
 adtk
 fastapi
 celery[redis]

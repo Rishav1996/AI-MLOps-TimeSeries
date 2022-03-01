@@ -41,6 +41,8 @@ st.download_button('Download Historical Sales Data',
                    data=data.to_csv(index=False), file_name=f'preprocessed_{train_id}.csv')
 
 metric_data = get_metric_data(train_id)
+metric_data['split_no'] = metric_data['split_no'].map(int)
+metric_data.sort_values(by=['split_no'], inplace=True)
 
 st.markdown('#### Forecast')
 
@@ -134,7 +136,7 @@ score_data = metric_data[(metric_data['ts_id'] == ts_id) & (~metric_data['metric
 score_data = pd.pivot_table(score_data, index=['split_no', 'split_window', 'model_name'],
                             columns='metric_name', values='metric_value')
 score_data.reset_index(inplace=True)
-score_data['key'] = score_data['split_no'] + '_' + score_data['split_window']
+score_data['key'] = score_data['split_no'].map(str) + '_' + score_data['split_window']
 temp = pd.DataFrame()
 
 list_of_performance_metrics = metric_data[~metric_data['metric_name'].isin(['psi', 'ks'])]['metric_name'].unique()
@@ -192,7 +194,7 @@ with col2:
     st.table(performing_model.head(3).reset_index(drop=True)[['split_window', 'model_name']])
 
 with col3:
-    st.markdown('#### Top 3 Models after Averaging')
+    st.markdown('#### Top 3 Models Lowest Average Score')
     average_models = score_data.groupby(['split_window', 'model_name']).mean().reset_index().copy()
     average_models = average_models.sort_values(by=['score'], ascending=True)
     st.table(average_models.head(3).reset_index(drop=True)[['split_window', 'model_name']])

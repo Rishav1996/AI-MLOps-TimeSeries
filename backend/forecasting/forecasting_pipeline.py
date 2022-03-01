@@ -264,8 +264,6 @@ def ensemble_forecasts(data, test_size, forecast_horizon, data_split, model_ids,
     for i in model_names:
         if i == 'arima':
             model_list.append((i, AutoARIMA(maxiter=20)))
-        if i == 'ets':
-            model_list.append((i, ExponentialSmoothing(trend='add', seasonal='add', sp=sp, use_boxcox=True)))
         if i == 'poly_trend':
             model_list.append((i, PolynomialTrendForecaster(degree=3)))
         if i == 'theta':

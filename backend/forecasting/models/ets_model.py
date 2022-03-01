@@ -3,7 +3,7 @@ import pandas as pnd
 
 
 def model(data, forecast_length):
-    sp = 1
+    sp = 2
     if data.index[1] - data.index[0] == pnd.Timedelta('1D'):
         sp = 365
     elif data.index[1] - data.index[0] == pnd.Timedelta('1M'):
