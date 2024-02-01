@@ -4,8 +4,10 @@ services:
     build: ./mysql
     container_name: mysql_db
     command: --default-authentication-plugin=mysql_native_password
+    restart: always
     environment:
-      MYSQL_ROOT_PASSWORD: "root"
+      MYSQL_ROOT_PASSWORD: ""
+      MYSQL_ALLOW_EMPTY_PASSWORD: True
       MYSQL_DATABASE: "mlops_ts_fcst"
       MYSQL_USER: "mlops_user"
       MYSQL_PASSWORD: "MLOPS1234"
@@ -14,6 +16,7 @@ services:
     networks:
       - internal-network
     volumes:
+      - ./mysql/scripts:/docker-entrypoint-initdb.d
       - dbdata:/var/lib/mysql
 
   redis_db:
@@ -28,8 +31,8 @@ services:
       - redis_db_data:/data
 
   celery_data_processing:
-    build: ./python_image
-    command: /home/conda/bin/celery -A data_processing.data_processing_pipeline worker --loglevel=INFO --autoscale=1,1 -Q data-processing-pipeline -E --without-gossip --without-mingle
+    build: ./backend
+    command: poetry run celery -A data_processing.data_processing_pipeline worker --loglevel=INFO --autoscale=1,1 -Q data-processing-pipeline -E --without-gossip --without-mingle
     image: python-image:1.0
     environment:
       - MKL_NUM_THREADS=1
@@ -45,13 +48,13 @@ services:
       - internal-network
     volumes:
       - api_data:/app/
-      - type: bind
-        source: ./backend/
-        target: /app/backend/
+    #   - type: bind
+    #     source: ./backend/
+    #     target: /app/backend/
 
   celery_forecasting:
     image: python-image:1.0
-    command: /home/conda/bin/celery -A forecasting.forecasting_pipeline worker --loglevel=INFO --autoscale=4,2 -Q forecasting-pipeline -E --without-gossip --without-mingle
+    command: poetry run celery -A forecasting.forecasting_pipeline worker --loglevel=INFO --autoscale=4,2 -Q forecasting-pipeline -E --without-gossip --without-mingle
     environment:
       - MKL_NUM_THREADS=1
       - PENBLAS_NUM_THREADS=1
@@ -66,21 +69,21 @@ services:
       replicas: 2
     volumes:
       - api_data:/app/
-      - type: bind
-        source: ./backend/
-        target: /app/backend/
+    #   - type: bind
+    #     source: ./backend/
+    #     target: /app/backend/
   
   flower_web:
     image: python-image:1.0
-    command: /home/conda/bin/celery --broker redis://redis_db:6379 --result-backend redis -A celery_app flower --loglevel=info
+    command: poetry run celery --broker redis://redis_db:6379 --result-backend redis -A celery_app flower --loglevel=info
     container_name: flower_monitor
     ports:
       - 5555:5555
     volumes:
       - api_data:/app/
-      - type: bind
-        source: ./backend/
-        target: /app/backend/
+    #   - type: bind
+    #     source: ./backend/
+    #     target: /app/backend/
     networks:
       - internal-network
     depends_on:
@@ -89,7 +92,7 @@ services:
 
   backend:
     image: python-image:1.0
-    command: /home/conda/bin/uvicorn app:app --port 8000 --reload --workers 1 --host 0.0.0.0 --log-level debug
+    command: poetry run uvicorn app:app --port 8000 --reload --workers 1 --host 0.0.0.0 --log-level debug
     container_name: api_container
     ports:
       - "8000:8000"
@@ -103,9 +106,9 @@ services:
       - internal-network
     volumes:
       - api_data:/app/
-      - type: bind
-        source: ./backend/
-        target: /app/backend/
+    #   - type: bind
+    #     source: ./backend/
+    #     target: /app/backend/
   
   frontend:
     build: ./frontend
@@ -129,9 +132,9 @@ services:
       - flower_web
   
   visualization:
-    build: ./python_visual_image
+    build: ./visualization
     container_name: visual_container
-    command: streamlit run app.py
+    command: poetry run streamlit run app.py
     image: python-visual-image:1.0
     ports:
       - "8501:8501"
@@ -139,11 +142,11 @@ services:
       - backend
     networks:
       - internal-network
-    volumes:
-      - visualization_data:/app/
-      - type: bind
-        source: ./visualization/
-        target: /app/visualization/
+    # volumes:
+    #   - visualization_data:/app/
+    #   - type: bind
+    #     source: ./visualization/
+    #     target: /app/visualization/
 
 networks:
   internal-network:

@@ -30,7 +30,7 @@ CREATE TABLE `metric_table` (
   `metric_desc` varchar(100) DEFAULT NULL,
   PRIMARY KEY (`metric_id`),
   UNIQUE KEY `metric_id_UNIQUE` (`metric_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=9 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=0 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --

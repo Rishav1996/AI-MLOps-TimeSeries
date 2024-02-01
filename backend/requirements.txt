@@ -13,3 +13,4 @@ rsa
 python-multipart
 eventlet
 requests
+sktime

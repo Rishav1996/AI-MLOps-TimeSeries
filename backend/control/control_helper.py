@@ -1,5 +1,5 @@
 import json
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from datetime import datetime
 from control.control_config import database_utils, data_processing_parameters, ingestion_stages, data_processing_stages, \
     forecasting_parameters
@@ -25,7 +25,7 @@ def password_hashing(text: str):
 def get_default_parameters_in_dict():
     engine = db_engine()
     conn = engine.connect()
-    parameters = conn.execute("select parameter_id, parameter_value from parameter_table").fetchall()
+    parameters = conn.execute(text("select parameter_id, parameter_value from parameter_table")).fetchall()
     parameters = pd.DataFrame(parameters)
     parameters.columns = ['parameter_id', 'parameter_value']
     parameters = {parameter['parameter_id']: parameter['parameter_value'] for parameter in
@@ -38,7 +38,7 @@ def get_default_parameters_in_dataframe():
     engine = db_engine()
     conn = engine.connect()
     parameters = conn.execute(
-        "select parameter_id, parameter_name, parameter_value, parameter_range_values from parameter_table").fetchall()
+        text("select parameter_id, parameter_name, parameter_value, parameter_range_values from parameter_table")).fetchall()
     parameters = pd.DataFrame(parameters)
     parameters.columns = ['parameter_id', 'parameter_name', 'parameter_value', 'parameter_range_values']
     conn.close()
@@ -49,7 +49,7 @@ def get_user_id(user_name):
     engine = db_engine()
     conn = engine.connect()
     user_id = \
-        conn.execute(f"SELECT ifnull(max(user_id), 0) FROM user_table WHERE user_name = '{user_name}'").fetchone()[0]
+        conn.execute(text(f"SELECT ifnull(max(user_id), 0) FROM user_table WHERE user_name = '{user_name}'")).fetchone()[0]
     return user_id
 
 
@@ -57,7 +57,7 @@ def insert_user(user_name, user_password):
     engine = db_engine()
     conn = engine.connect()
     conn.execute(
-        f"INSERT INTO user_table (user_name, user_password) VALUES ('{user_name}', '{password_hashing(user_password)}')")
+        text(f"INSERT INTO user_table (user_name, user_password) VALUES ('{user_name}', '{password_hashing(user_password)}')"))
     return
 
 
@@ -67,7 +67,7 @@ def verify_user(user_name, user_password):
     if get_user_id(user_name) > 0:
         user_password_hash = \
             conn.execute(
-                f"SELECT ifnull(user_password, '') FROM user_table WHERE user_name = '{user_name}'").fetchone()[0]
+                text(f"SELECT ifnull(user_password, '') FROM user_table WHERE user_name = '{user_name}'")).fetchone()[0]
         if user_password_hash == password_hashing(user_password):
             return True
     return False
@@ -76,7 +76,7 @@ def verify_user(user_name, user_password):
 def verify_user_id(user_id):
     engine = db_engine()
     conn = engine.connect()
-    user = conn.execute(f"SELECT ifnull(count(*), 0) FROM user_table WHERE user_id = {user_id}")
+    user = conn.execute(text(f"SELECT ifnull(count(*), 0) FROM user_table WHERE user_id = {user_id}"))
     if user.rowcount > 0:
         return True
     return False
@@ -88,12 +88,12 @@ def get_dp_train_ids(train_type, user_id):
     train_ids = []
     if train_type == 'create':
         train_ids = conn.execute(
-            f"SELECT train_id FROM train_history_table th join data_history_table dh on(th.data_ing_id = dh.data_id) where ifnull(data_dp_id, 0) = 0 and dh.user_id = {user_id} and th.status = 'ING_E'").fetchall()
+            text(f"SELECT train_id FROM train_history_table th join data_history_table dh on(th.data_ing_id = dh.data_id) where ifnull(data_dp_id, 0) = 0 and dh.user_id = {user_id} and th.status = 'ING_E'")).fetchall()
         if len(train_ids) > 0:
             train_ids = [train_id[0] for train_id in train_ids]
     elif train_type == 'existing':
         train_ids = conn.execute(
-            f"SELECT train_id FROM train_history_table th join data_history_table dh on(th.data_ing_id = dh.data_id) where ifnull(data_dp_id, 0) > 0 and dh.user_id = {user_id} and th.status != 'ING_E'").fetchall()
+            text(f"SELECT train_id FROM train_history_table th join data_history_table dh on(th.data_ing_id = dh.data_id) where ifnull(data_dp_id, 0) > 0 and dh.user_id = {user_id} and th.status != 'ING_E'")).fetchall()
         if len(train_ids) > 0:
             train_ids = [train_id[0] for train_id in train_ids]
     return train_ids
@@ -105,12 +105,12 @@ def get_fcst_train_ids(train_type, user_id):
     train_ids = []
     if train_type == 'create':
         train_ids = conn.execute(
-            f"SELECT train_id FROM train_history_table th join data_history_table dh on(th.data_ing_id = dh.data_id) where ifnull(data_fcst_id, 0) = 0 and dh.user_id = {user_id} and th.status = 'DP_E'").fetchall()
+            text(f"SELECT train_id FROM train_history_table th join data_history_table dh on(th.data_ing_id = dh.data_id) where ifnull(data_fcst_id, 0) = 0 and dh.user_id = {user_id} and th.status = 'DP_E'")).fetchall()
         if len(train_ids) > 0:
             train_ids = [train_id[0] for train_id in train_ids]
     elif train_type == 'existing':
         train_ids = conn.execute(
-            f"SELECT train_id FROM train_history_table th join data_history_table dh on(th.data_ing_id = dh.data_id) where ifnull(data_fcst_id, 0) > 0 and dh.user_id = {user_id} and th.status != 'DP_E'").fetchall()
+            text(f"SELECT train_id FROM train_history_table th join data_history_table dh on(th.data_ing_id = dh.data_id) where ifnull(data_fcst_id, 0) > 0 and dh.user_id = {user_id} and th.status != 'DP_E'")).fetchall()
         if len(train_ids) > 0:
             train_ids = [train_id[0] for train_id in train_ids]
     return train_ids
@@ -135,13 +135,13 @@ def get_default_fcst_parameters():
 def copy_existing_dp_data_id(train_id):
     engine = db_engine()
     conn = engine.connect()
-    data_id = conn.execute(f"SELECT data_ing_id FROM train_history_table WHERE train_id = {train_id}").fetchone()[0]
-    new_train_id = conn.execute(f"SELECT max(train_id) FROM train_history_table").fetchone()[0] + 1
+    data_id = conn.execute(text(f"SELECT data_ing_id FROM train_history_table WHERE train_id = {train_id}")).fetchone()[0]
+    new_train_id = conn.execute(text(f"SELECT max(train_id) FROM train_history_table")).fetchone()[0] + 1
     create_time = get_time_now()
     parameters = get_default_parameters_in_dict()
     ing_end = parameters[ingestion_stages["ing_end"]]
     conn.execute(
-        f"insert into train_history_table(train_id, data_ing_id, ing_start_time, ing_end_time, status) values ({new_train_id}, {data_id}, '{create_time}', '{create_time}', '{ing_end}')")
+        text(f"insert into train_history_table(train_id, data_ing_id, ing_start_time, ing_end_time, status) values ({new_train_id}, {data_id}, '{create_time}', '{create_time}', '{ing_end}')"))
     conn.close()
     return new_train_id
 
@@ -149,14 +149,14 @@ def copy_existing_dp_data_id(train_id):
 def copy_existing_fcst_data_id(train_id):
     engine = db_engine()
     conn = engine.connect()
-    data_ing_id = conn.execute(f"SELECT data_ing_id FROM train_history_table WHERE train_id = {train_id}").fetchone()[0]
-    data_dp_id = conn.execute(f"SELECT data_dp_id FROM train_history_table WHERE train_id = {train_id}").fetchone()[0]
-    new_train_id = conn.execute(f"SELECT max(train_id) FROM train_history_table").fetchone()[0] + 1
+    data_ing_id = conn.execute(text(f"SELECT data_ing_id FROM train_history_table WHERE train_id = {train_id}")).fetchone()[0]
+    data_dp_id = conn.execute(text(f"SELECT data_dp_id FROM train_history_table WHERE train_id = {train_id}")).fetchone()[0]
+    new_train_id = conn.execute(text(f"SELECT max(train_id) FROM train_history_table")).fetchone()[0] + 1
     create_time = get_time_now()
     parameters = get_default_parameters_in_dict()
     data_proc_end = parameters[data_processing_stages["data_proc_end"]]
     conn.execute(
-        f"insert into train_history_table(train_id, data_ing_id, data_dp_id, ing_start_time, ing_end_time, dp_start_time, dp_end_time, status) values ({new_train_id}, {data_ing_id}, {data_dp_id}, '{create_time}', '{create_time}', '{create_time}', '{create_time}', '{data_proc_end}')")
+        text(f"insert into train_history_table(train_id, data_ing_id, data_dp_id, ing_start_time, ing_end_time, dp_start_time, dp_end_time, status) values ({new_train_id}, {data_ing_id}, {data_dp_id}, '{create_time}', '{create_time}', '{create_time}', '{create_time}', '{data_proc_end}')"))
     conn.close()
     return new_train_id
 
@@ -178,7 +178,7 @@ def verify_metrics_exists(train_id):
     engine = db_engine()
     conn = engine.connect()
     metrics = conn.execute(
-        f"SELECT * FROM train_metric_table WHERE train_id = {train_id} and metric_id not in (7,8)").fetchall()
+        text(f"SELECT * FROM train_metric_table WHERE train_id = {train_id} and metric_id not in (7,8)")).fetchall()
     conn.close()
     return len(metrics) > 0
 

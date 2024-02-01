@@ -30,7 +30,7 @@ CREATE TABLE `model_table` (
   `model_desc` varchar(100) DEFAULT NULL,
   PRIMARY KEY (`model_id`),
   UNIQUE KEY `model_id_UNIQUE` (`model_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=9 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=0 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
