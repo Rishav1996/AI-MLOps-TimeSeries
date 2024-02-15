@@ -2,6 +2,7 @@ import os
 
 import pandas as pd
 import pandas as pnd
+from sqlalchemy import text
 
 from control.control_config import ingestion_stages, database_utils
 from control.control_helper import get_time_now, db_engine, get_default_parameters_in_dict
@@ -12,8 +13,8 @@ from forecasting import forecasting_pipeline as fp
 def generate_ingest_id():
     engine = db_engine()
     conn = engine.connect()
-    train_id = conn.execute("select ifnull(max(train_id), 0) from train_history_table").fetchone()[0] + 1
-    data_id = conn.execute("select ifnull(max(data_id), 0) from data_history_table").fetchone()[0] + 1
+    train_id = conn.execute(text("select ifnull(max(train_id), 0) from train_history_table")).fetchone()[0] + 1
+    data_id = conn.execute(text("select ifnull(max(data_id), 0) from data_history_table")).fetchone()[0] + 1
     conn.close()
     return int(train_id), int(data_id)
 
@@ -22,8 +23,8 @@ def ingest_parameters(train_id, parameters):
     engine = db_engine()
     conn = engine.connect()
     for parameter_id, parameter_value in parameters.items():
-        conn.execute(f"insert into train_history_table (train_id, parameter_id, parameter_value) "
-                     f"values ({train_id}, {parameter_id}, '{parameter_value}')")
+        conn.execute(text(f"insert into train_history_table (train_id, parameter_id, parameter_value) "
+                     f"values ({train_id}, {parameter_id}, '{parameter_value}')"))
     conn.close()
 
 
@@ -45,17 +46,17 @@ def ingest_data(train_id, data_id, file_name, user_id):
         ingestion = False
         try:
             conn.execute(
-                f"insert into train_history_table(train_id, data_ing_id, ing_start_time, status) values ({train_id}, {data_id}, '{create_time}', '{ing_start}')")
+                text(f"insert into train_history_table(train_id, data_ing_id, ing_start_time, status) values ({train_id}, {data_id}, '{create_time}', '{ing_start}')"))
             conn.close()
 
             engine = db_engine()
             conn = engine.connect()
-            conn.execute(f"update train_history_table set status = '{ing_processing}' where train_id = {train_id}")
+            conn.execute(text(f"update train_history_table set status = '{ing_processing}' where train_id = {train_id}"))
             conn.close()
 
             engine = db_engine()
             conn = engine.connect()
-            conn.execute(f"insert into data_history_table values ({data_id}, '{ing_flag}', {user_id}, '{create_time}')")
+            conn.execute(text(f"insert into data_history_table values ({data_id}, '{ing_flag}', {user_id}, '{create_time}')"))
             conn.close()
 
             engine = db_engine()
@@ -66,7 +67,7 @@ def ingest_data(train_id, data_id, file_name, user_id):
             conn = engine.connect()
             end_time = get_time_now()
             conn.execute(
-                f"update train_history_table set ing_end_time = '{end_time}' , status = '{ing_end}' where train_id = {train_id}")
+                text(f"update train_history_table set ing_end_time = '{end_time}' , status = '{ing_end}' where train_id = {train_id}"))
             conn.close()
 
             os.remove("./control/raw_data/" + file_name)
@@ -80,12 +81,12 @@ def ingest_data(train_id, data_id, file_name, user_id):
             conn = engine.connect()
             end_time = get_time_now()
             conn.execute(
-                f"update train_history_table set ing_end_time = '{end_time}' , status = '{ing_failed}' where train_id = {train_id}")
+                text(f"update train_history_table set ing_end_time = '{end_time}' , status = '{ing_failed}' where train_id = {train_id}"))
             conn.close()
 
             engine = db_engine()
             conn = engine.connect()
-            conn.execute(f"delete from data_history_table where data_id = {data_id}")
+            conn.execute(text(f"delete from data_history_table where data_id = {data_id}"))
             conn.close()
 
             os.remove("./control/raw_data/" + file_name)

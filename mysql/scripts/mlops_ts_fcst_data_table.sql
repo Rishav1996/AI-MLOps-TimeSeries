@@ -27,7 +27,7 @@ DROP TABLE IF EXISTS `data_table`;
 CREATE TABLE `data_table` (
   `data_id` int NOT NULL,
   `status` varchar(10) NOT NULL,
-  `period` date NOT NULL,
+  `period` varchar(10) NOT NULL,
   `ts_id` int NOT NULL,
   `value` double DEFAULT NULL,
   `split_window` varchar(45) DEFAULT NULL,
