@@ -14,4 +14,3 @@ python-multipart
 eventlet
 requests
 sktime
-loguru

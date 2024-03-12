@@ -47,16 +47,19 @@ def ingest_data(train_id, data_id, file_name, user_id):
         try:
             conn.execute(
                 text(f"insert into train_history_table(train_id, data_ing_id, ing_start_time, status) values ({train_id}, {data_id}, '{create_time}', '{ing_start}')"))
+            conn.commit()
             conn.close()
 
             engine = db_engine()
             conn = engine.connect()
             conn.execute(text(f"update train_history_table set status = '{ing_processing}' where train_id = {train_id}"))
+            conn.commit()
             conn.close()
 
             engine = db_engine()
             conn = engine.connect()
             conn.execute(text(f"insert into data_history_table values ({data_id}, '{ing_flag}', {user_id}, '{create_time}')"))
+            conn.commit()
             conn.close()
 
             engine = db_engine()
@@ -68,6 +71,7 @@ def ingest_data(train_id, data_id, file_name, user_id):
             end_time = get_time_now()
             conn.execute(
                 text(f"update train_history_table set ing_end_time = '{end_time}' , status = '{ing_end}' where train_id = {train_id}"))
+            conn.commit()
             conn.close()
 
             os.remove("./control/raw_data/" + file_name)
@@ -82,6 +86,7 @@ def ingest_data(train_id, data_id, file_name, user_id):
             end_time = get_time_now()
             conn.execute(
                 text(f"update train_history_table set ing_end_time = '{end_time}' , status = '{ing_failed}' where train_id = {train_id}"))
+            conn.commit()
             conn.close()
 
             engine = db_engine()
