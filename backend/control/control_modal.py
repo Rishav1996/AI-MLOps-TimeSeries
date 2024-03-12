@@ -1,7 +1,7 @@
 import os
 
 import pandas as pd
-import pandas as pnd
+
 from sqlalchemy import text
 
 from control.control_config import ingestion_stages, database_utils
@@ -33,7 +33,7 @@ def ingest_data(train_id, data_id, file_name, user_id):
         create_time = get_time_now()
         engine = db_engine()
         conn = engine.connect()
-        dataset = pnd.read_csv("./control/raw_data/" + file_name)
+        dataset = pd.read_csv("./control/raw_data/" + file_name)
         dataset = pd.DataFrame(data=dataset.values, columns=dataset.columns)
         parameters = get_default_parameters_in_dict()
         ing_flag = parameters[ingestion_stages["ing_flag"]]
