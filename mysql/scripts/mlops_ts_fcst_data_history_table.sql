@@ -28,7 +28,7 @@ CREATE TABLE `data_history_table` (
   `data_id` int NOT NULL AUTO_INCREMENT,
   `status` varchar(10) NOT NULL,
   `user_id` int NOT NULL,
-  `data_create_time` datetime NOT NULL,
+  `data_create_time` TEXT NOT NULL,
   PRIMARY KEY (`data_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
