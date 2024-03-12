@@ -1,11 +1,12 @@
 from data_processing.imputers import linear_imputer, mean_imputer, median_imputer, nearest_imputer
 from data_processing.outliers import isolation_forest_detector, local_outlier_factor_detector, zscore_detector
-import getopt, sys
+
 from data_processing.data_processing_helper import get_time_now, db_engine, get_default_parameters_in_dict, \
     get_train_parameters_in_dict
 from data_processing.data_processing_config import data_processing_stages, database_utils, data_processing_parameters
 import pandas as pd
 import warnings
+from sqlalchemy import text
 from celery_app import celery_client
 from celery.result import AsyncResult
 
@@ -16,7 +17,7 @@ warnings.filterwarnings("ignore")
 def get_ingest_id(train_id):
     engine = db_engine()
     conn = engine.connect()
-    data_id = conn.execute(f"select data_ing_id from train_history_table where train_id={train_id}").fetchone()[0]
+    data_id = conn.execute(text(f"select data_ing_id from train_history_table where train_id={train_id}")).fetchone()[0]
     conn.close()
     return int(data_id)
 
@@ -25,7 +26,7 @@ def get_user_id(train_id):
     engine = db_engine()
     conn = engine.connect()
     user_id = conn.execute(
-        f"select user_id from data_history_table where data_id in (select data_ing_id from train_history_table where train_id={train_id})").fetchone()[
+        text(f"select user_id from data_history_table where data_id in (select data_ing_id from train_history_table where train_id={train_id})")).fetchone()[
         0]
     conn.close()
     return int(user_id)
@@ -35,14 +36,15 @@ def insert_data_id(data_id, user_id, data_proc_flag):
     engine = db_engine()
     conn = engine.connect()
     conn.execute(
-        f"insert into data_history_table (data_id, user_id, status, data_create_time) values ({data_id}, {user_id}, '{data_proc_flag}', '{get_time_now()}')")
+        text(f"insert into data_history_table (data_id, user_id, status, data_create_time) values ({data_id}, {user_id}, '{data_proc_flag}', '{get_time_now()}')"))
+    conn.commit()
     conn.close()
 
 
 def generate_dp_id():
     engine = db_engine()
     conn = engine.connect()
-    data_id = conn.execute("select ifnull(max(data_id), 0) from data_history_table").fetchone()[0] + 1
+    data_id = conn.execute(text("select ifnull(max(data_id), 0) from data_history_table")).fetchone()[0] + 1
     conn.close()
     return int(data_id)
 
@@ -50,21 +52,23 @@ def generate_dp_id():
 def set_dp_start_time(train_id):
     engine = db_engine()
     conn = engine.connect()
-    conn.execute(f"update train_history_table set dp_start_time='{get_time_now()}' where train_id={train_id}")
+    conn.execute(text(f"update train_history_table set dp_start_time='{get_time_now()}' where train_id={train_id}"))
+    conn.commit()
     conn.close()
 
 
 def set_dp_end_time(train_id):
     engine = db_engine()
     conn = engine.connect()
-    conn.execute(f"update train_history_table set dp_end_time='{get_time_now()}' where train_id={train_id}")
+    conn.execute(text(f"update train_history_table set dp_end_time='{get_time_now()}' where train_id={train_id}"))
+    conn.commit()
     conn.close()
 
 
 def get_data(data_id):
     engine = db_engine()
     conn = engine.connect()
-    data = conn.execute(f"select period, ts_id, value from data_table where data_id={data_id}").fetchall()
+    data = conn.execute(text(f"select period, ts_id, value from data_table where data_id={data_id}")).fetchall()
     data = pd.DataFrame(data)
     data.columns = ['period', 'ts_id', 'value']
     conn.close()
@@ -74,14 +78,16 @@ def get_data(data_id):
 def set_dp_flag(train_id, flag):
     engine = db_engine()
     conn = engine.connect()
-    conn.execute(f"update train_history_table set status='{flag}' where train_id={train_id}")
+    conn.execute(text(f"update train_history_table set status='{flag}' where train_id={train_id}"))
+    conn.commit()
     conn.close()
 
 
 def set_dp_id(train_id, data_id):
     engine = db_engine()
     conn = engine.connect()
-    conn.execute(f"update train_history_table set data_dp_id={data_id} where train_id={train_id}")
+    conn.execute(text(f"update train_history_table set data_dp_id={data_id} where train_id={train_id}"))
+    conn.commit()
     conn.close()
 
 

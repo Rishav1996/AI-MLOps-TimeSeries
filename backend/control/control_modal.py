@@ -25,6 +25,7 @@ def ingest_parameters(train_id, parameters):
     for parameter_id, parameter_value in parameters.items():
         conn.execute(text(f"insert into train_history_table (train_id, parameter_id, parameter_value) "
                      f"values ({train_id}, {parameter_id}, '{parameter_value}')"))
+    conn.commit()
     conn.close()
 
 

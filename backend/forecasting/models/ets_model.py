@@ -1,5 +1,5 @@
 from sktime.forecasting.all import ExponentialSmoothing
-
+import pandas as pd
 
 
 def model(data, forecast_length):

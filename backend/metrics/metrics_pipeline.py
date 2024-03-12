@@ -1,6 +1,7 @@
 from metrics.metrics_config import database_utils
 from metrics.metrics_helper import db_engine
 from metrics.performance_metrics import rmse_metric, rmspe_metric, mape_metric, aic_metric, bic_metric, bias_metric
+from sqlalchemy import text
 import pandas as pd
 
 
@@ -8,13 +9,13 @@ def get_data(train_id):
     engine = db_engine()
     conn = engine.connect()
     ing_id, fcst_id = conn.execute(
-        f"select data_ing_id, data_fcst_id from train_history_table where train_id={train_id}").fetchone()
+        text(f"select data_ing_id, data_fcst_id from train_history_table where train_id={train_id}")).fetchone()
 
-    ing_data = conn.execute(f"select ts_id, period, value from data_table where data_id={ing_id}").fetchall()
+    ing_data = conn.execute(text(f"select ts_id, period, value from data_table where data_id={ing_id}")).fetchall()
     ing_data = pd.DataFrame(ing_data, columns=['ts_id', 'period', 'historical'])
 
     fcst_data = conn.execute(
-        f"select ts_id, period, value, split_window, split_no, model_id from data_table where data_id={fcst_id}").fetchall()
+        text(f"select ts_id, period, value, split_window, split_no, model_id from data_table where data_id={fcst_id}")).fetchall()
     fcst_data = pd.DataFrame(fcst_data, columns=['ts_id', 'period', 'forecast', 'split_window', 'split_no', 'model_id'])
 
     data = pd.merge(ing_data, fcst_data, on=['ts_id', 'period'], how='outer')
@@ -26,7 +27,7 @@ def get_data(train_id):
 def get_metrics_list():
     engine = db_engine()
     conn = engine.connect()
-    metrics_list = conn.execute("select metric_id, metric_name from metric_table").fetchall()
+    metrics_list = conn.execute(text("select metric_id, metric_name from metric_table")).fetchall()
     metrics_list = {metric_name: metric_id for metric_id, metric_name in metrics_list}
     conn.close()
     return metrics_list

@@ -10,6 +10,7 @@ import pandas as pd
 import warnings
 from sktime.forecasting.all import ForecastingHorizon, ExponentialSmoothing, AutoARIMA, ThetaForecaster, NaiveForecaster, \
     PolynomialTrendForecaster
+from sqlalchemy import text
 from celery_app import celery_client
 from celery.result import AsyncResult
 
@@ -20,7 +21,7 @@ warnings.filterwarnings("ignore")
 def get_data_processing_id(train_id):
     engine = db_engine()
     conn = engine.connect()
-    data_id = conn.execute(f"select data_dp_id from train_history_table where train_id={train_id}").fetchone()[0]
+    data_id = conn.execute(text(f"select data_dp_id from train_history_table where train_id={train_id}")).fetchone()[0]
     conn.close()
     return int(data_id)
 
@@ -29,7 +30,7 @@ def get_user_id(train_id):
     engine = db_engine()
     conn = engine.connect()
     user_id = conn.execute(
-        f"select user_id from data_history_table where data_id in (select data_ing_id from train_history_table where train_id={train_id})").fetchone()[
+        text(f"select user_id from data_history_table where data_id in (select data_ing_id from train_history_table where train_id={train_id})")).fetchone()[
         0]
     conn.close()
     return int(user_id)
@@ -38,7 +39,7 @@ def get_user_id(train_id):
 def fetch_models_list():
     engine = db_engine()
     conn = engine.connect()
-    models = conn.execute(f"select model_id, model_name from model_table").fetchall()
+    models = conn.execute(text(f"select model_id, model_name from model_table")).fetchall()
     models = pd.DataFrame(models, columns=['model_id', 'model_name'])
     models.index = models['model_id']
     models.drop(columns=['model_id'], inplace=True)
@@ -50,7 +51,7 @@ def fetch_models_list():
 def generate_fcst_id():
     engine = db_engine()
     conn = engine.connect()
-    data_id = conn.execute("select ifnull(max(data_id), 0) from data_history_table").fetchone()[0] + 1
+    data_id = conn.execute(text("select ifnull(max(data_id), 0) from data_history_table")).fetchone()[0] + 1
     conn.close()
     return int(data_id)
 
@@ -58,7 +59,7 @@ def generate_fcst_id():
 def get_data(data_id):
     engine = db_engine()
     conn = engine.connect()
-    data = conn.execute(f"select period, ts_id, value from data_table where data_id={data_id}").fetchall()
+    data = conn.execute(text(f"select period, ts_id, value from data_table where data_id={data_id}")).fetchall()
     data = pd.DataFrame(data)
     data.columns = ['period', 'ts_id', 'value']
     conn.close()
@@ -68,7 +69,7 @@ def get_data(data_id):
 def get_model(model_id):
     engine = db_engine()
     conn = engine.connect()
-    model = conn.execute(f"select model_name from model_table where model_id={model_id}").fetchone()[0]
+    model = conn.execute(text(f"select model_name from model_table where model_id={model_id}")).fetchone()[0]
     conn.close()
     return model
 
@@ -134,15 +135,16 @@ def models_forecasts(train, forecast_length, future_periods, model_name='', mode
 def insert_metric(train_id, ts_id, model_id, split_window, split_no, metric_id, metric_value):
     engine = db_engine()
     conn = engine.connect()
-    conn.execute(f"insert into train_metric_table values ({train_id}, {ts_id}, {model_id}, '{split_window}', {split_no}, "
-                 f"{metric_id}, '{metric_value}')")
+    conn.execute(text(f"insert into train_metric_table values ({train_id}, {ts_id}, {model_id}, '{split_window}', {split_no}, "
+                 f"{metric_id}, '{metric_value}')"))
+    conn.commit()
     conn.close()
 
 
 def get_metrics_list():
     engine = db_engine()
     conn = engine.connect()
-    metrics_list = conn.execute("select metric_id, metric_name from metric_table").fetchall()
+    metrics_list = conn.execute(text("select metric_id, metric_name from metric_table")).fetchall()
     metrics_list = {metric_name: metric_id for metric_id, metric_name in metrics_list}
     conn.close()
     return metrics_list
@@ -162,6 +164,7 @@ def simple_forecasting(data, test_size, forecast_horizon, data_split, train_id):
     if data_split == 'expanding' or data_split == 'both':
         initial_window = int(round(data.shape[0] * (1 - test_size), 0))
         forecast_length = int(round(forecast_horizon * (data.shape[0] - initial_window), 0))
+        forecast_length = 3 if forecast_length == 0 else forecast_length
         initial_window = initial_window + (data.shape[0] - initial_window) % forecast_length
         data_splitter = expanding_window_splitter.splitter(data['value'], initial_window, forecast_length)
         train_test_split = []
@@ -172,6 +175,7 @@ def simple_forecasting(data, test_size, forecast_horizon, data_split, train_id):
     if data_split == 'sliding' or data_split == 'both':
         window_length = int(round(data.shape[0] * (1 - test_size), 0))
         forecast_length = int(round(forecast_horizon * (data.shape[0] - window_length), 0))
+        forecast_length = 3 if forecast_length == 0 else forecast_length
         window_length = window_length + (data.shape[0] - window_length) % forecast_length
         data_splitter = sliding_window_splitter.splitter(data['value'], window_length, forecast_length)
         train_test_split = []
@@ -228,6 +232,7 @@ def ensemble_forecasts(data, test_size, forecast_horizon, data_split, model_ids,
     if data_split == 'expanding' or data_split == 'both':
         initial_window = int(round(data.shape[0] * (1 - test_size), 0))
         forecast_length = int(round(forecast_horizon * (data.shape[0] - initial_window), 0))
+        forecast_length = 3 if forecast_length == 0 else forecast_length
         initial_window = initial_window + (data.shape[0] - initial_window) % forecast_length
         date_diff = data.index[1] - data.index[0]
         data_splitter = expanding_window_splitter.splitter(data[['value']], initial_window, forecast_length)
@@ -240,6 +245,7 @@ def ensemble_forecasts(data, test_size, forecast_horizon, data_split, model_ids,
     if data_split == 'sliding' or data_split == 'both':
         window_length = int(round(data.shape[0] * (1 - test_size), 0))
         forecast_length = int(round(forecast_horizon * (data.shape[0] - window_length), 0))
+        forecast_length = 3 if forecast_length == 0 else forecast_length
         window_length = window_length + (data.shape[0] - window_length) % forecast_length
         date_diff = data.index[1] - data.index[0]
         data_splitter = sliding_window_splitter.splitter(data[['value']], window_length, forecast_length)
@@ -308,28 +314,32 @@ def ensemble_forecasts(data, test_size, forecast_horizon, data_split, model_ids,
 def set_fcst_flag(train_id, flag):
     engine = db_engine()
     conn = engine.connect()
-    conn.execute(f"update train_history_table set status='{flag}' where train_id={train_id}")
+    conn.execute(text(f"update train_history_table set status='{flag}' where train_id={train_id}"))
+    conn.commit()
     conn.close()
 
 
 def set_fcst_start_time(train_id):
     engine = db_engine()
     conn = engine.connect()
-    conn.execute(f"update train_history_table set fcst_start_time='{get_time_now()}' where train_id={train_id}")
+    conn.execute(text(f"update train_history_table set fcst_start_time='{get_time_now()}' where train_id={train_id}"))
+    conn.commit()
     conn.close()
 
 
 def set_fcst_end_time(train_id):
     engine = db_engine()
     conn = engine.connect()
-    conn.execute(f"update train_history_table set fcst_end_time='{get_time_now()}' where train_id={train_id}")
+    conn.execute(text(f"update train_history_table set fcst_end_time='{get_time_now()}' where train_id={train_id}"))
+    conn.commit()
     conn.close()
 
 
 def set_fcst_id(train_id, data_id):
     engine = db_engine()
     conn = engine.connect()
-    conn.execute(f"update train_history_table set data_fcst_id={data_id} where train_id={train_id}")
+    conn.execute(text(f"update train_history_table set data_fcst_id={data_id} where train_id={train_id}"))
+    conn.commit()
     conn.close()
 
 
@@ -337,7 +347,8 @@ def insert_data_id(data_id, user_id, data_proc_flag):
     engine = db_engine()
     conn = engine.connect()
     conn.execute(
-        f"insert into data_history_table (data_id, user_id, status, data_create_time) values ({data_id}, {user_id}, '{data_proc_flag}', '{get_time_now()}')")
+        text(f"insert into data_history_table (data_id, user_id, status, data_create_time) values ({data_id}, {user_id}, '{data_proc_flag}', '{get_time_now()}')"))
+    conn.commit()
     conn.close()
 
 
@@ -433,6 +444,7 @@ def main(train_id):
             dataset_return = pd.concat([dataset_return, ensemble_dataset_return], axis=0)
 
         dataset_return['ts_id'] = dataset_return['key'].map(lambda x: int(x.split('_')[0]))
+        dataset_return['period'] = dataset_return['period'].map(lambda x: x.strftime('%d-%m-%Y'))
         dataset_return['model_id'] = dataset_return['key'].map(lambda x: int(x.split('_')[1]))
         dataset_return['data_id'] = new_data_id
         dataset_return['status'] = fcst_flag

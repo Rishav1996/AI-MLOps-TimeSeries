@@ -1,5 +1,5 @@
+import pandas as pd
 from sktime.forecasting.all import AutoARIMA
-
 
 
 def model(data, forecast_length):
