@@ -7,8 +7,8 @@ st.set_page_config(page_title="Visualization", layout="wide",
                    initial_sidebar_state="expanded", page_icon="image/line-chart.png")
 st.header("Visualization of Time Series Data")
 
-if 'user_id' in st.experimental_get_query_params().keys():
-    user_id = st.experimental_get_query_params()['user_id'][0]
+if 'user_id' in st.query_params.to_dict().keys():
+    user_id = st.query_params.to_dict()['user_id'][0]
     st.session_state.user_id = user_id[0]
 elif 'user_id' in st.session_state.keys():
     user_id = st.session_state.user_id[0]

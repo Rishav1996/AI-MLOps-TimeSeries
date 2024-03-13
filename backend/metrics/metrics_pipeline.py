@@ -47,28 +47,27 @@ def generate_metrics(data):
 
     if 'rmse' in list(metrics_list.keys()):
         rmse = round(rmse_metric.metric_loss(y_true, y_pred), 10)
-        metric_table = metric_table.append({'metric_id': metrics_list['rmse'], 'metric_value': rmse}, ignore_index=True)
+        metric_table.loc[len(metric_table), metric_table.columns] = metrics_list['rmse'], rmse
 
     if 'rmspe' in list(metrics_list.keys()):
         rmspe = round(rmspe_metric.metric_loss(y_true, y_pred), 10)
-        metric_table = metric_table.append({'metric_id': metrics_list['rmspe'], 'metric_value': rmspe},
-                                           ignore_index=True)
+        metric_table.loc[len(metric_table), metric_table.columns] = metrics_list['rmspe'], rmspe
 
     if 'mape' in list(metrics_list.keys()):
         mape = round(mape_metric.metric_loss(y_true, y_pred), 10)
-        metric_table = metric_table.append({'metric_id': metrics_list['mape'], 'metric_value': mape}, ignore_index=True)
+        metric_table.loc[len(metric_table), metric_table.columns] = metrics_list['mape'], mape
 
     if 'aic' in list(metrics_list.keys()):
         aic = round(aic_metric.metric_loss(y_true, y_pred), 10)
-        metric_table = metric_table.append({'metric_id': metrics_list['aic'], 'metric_value': aic}, ignore_index=True)
+        metric_table.loc[len(metric_table), metric_table.columns] = metrics_list['aic'], aic
 
     if 'bic' in list(metrics_list.keys()):
         bic = round(bic_metric.metric_loss(y_true, y_pred), 10)
-        metric_table = metric_table.append({'metric_id': metrics_list['bic'], 'metric_value': bic}, ignore_index=True)
+        metric_table.loc[len(metric_table), metric_table.columns] = metrics_list['bic'], bic
 
     if 'bias' in list(metrics_list.keys()):
         bias = round(bias_metric.metric_loss(y_true, y_pred), 10)
-        metric_table = metric_table.append({'metric_id': metrics_list['bias'], 'metric_value': bias}, ignore_index=True)
+        metric_table.loc[len(metric_table), metric_table.columns] = metrics_list['bias'], bias
 
     return metric_table
 
