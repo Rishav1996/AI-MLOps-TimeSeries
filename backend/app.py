@@ -1,3 +1,10 @@
+"""FastAPI entrypoint exposing the platform's HTTP API.
+
+Endpoints cover user auth (signup/login), CSV ingestion, and triggering the three
+pipeline stages (data processing, forecasting, metrics) plus run-status lookup. The
+long-running stages are dispatched as FastAPI background tasks, which in turn fan work
+out to Celery workers.
+"""
 import os
 
 from fastapi import FastAPI, File, UploadFile, Form, BackgroundTasks
@@ -29,11 +36,13 @@ app.add_middleware(
 
 @app.get("/test")
 async def test():
+    """Health check; returns a static payload to confirm the API is up."""
     return {"Hello": "World"}
 
 
 @app.post("/signup")
 async def signup(user: UserTable):
+    """Register a new user, rejecting blank or already-taken usernames."""
     if user.user_password == "":
         return {"status": "FAILURE", "message": "Password is required"}, 400
     if user.user_name == "":
@@ -48,6 +57,7 @@ async def signup(user: UserTable):
 
 @app.post("/login")
 async def login(user: UserTable):
+    """Authenticate a user and return their user_id on success."""
     if user.user_password == "":
         return {"status": "FAILURE", "message": "Password is required"}, 400
     if user.user_name == "":
@@ -62,6 +72,10 @@ async def login(user: UserTable):
 
 @app.post("/upload-ingestion-data")
 async def upload_ingestion_data(background_tasks: BackgroundTasks, user_id: int = Form(...), file: UploadFile = File(...)):
+    """Save an uploaded CSV and kick off ingestion in the background.
+
+    Returns the generated train_id/data_id immediately; the actual load runs async.
+    """
     if user_id == 0:
         return {"status": "FAILURE", "message": "User Id is required"}, 400
     if file.filename == "":
@@ -80,11 +94,13 @@ async def upload_ingestion_data(background_tasks: BackgroundTasks, user_id: int 
 
 @app.get('/get-default-data-processing-parameters')
 async def get_dp_parameters():
+    """Return the default data-processing parameters and their allowed ranges."""
     return {"status": "SUCCESS", "parameters": get_default_dp_parameters()}, 200
 
 
 @app.post('/get-dp-train-ids')
 async def get_dp_train(user_id: int = Form(...), train_type: str = Form(...)):
+    """List train_ids eligible for data processing (new vs. re-run) for a user."""
     if verify_user_id(user_id):
         train_id = get_dp_train_ids(train_type, user_id)
         return {"status": "SUCCESS", "train_id": train_id}, 200
@@ -94,6 +110,10 @@ async def get_dp_train(user_id: int = Form(...), train_type: str = Form(...)):
 
 @app.post('/trigger-data-processing')
 async def trigger_dp(background_tasks: BackgroundTasks, user_id: int = Form(...), train_id: int = Form(...), parameters: str = Form(...), train_type: str = Form(...)):
+    """Persist parameters and run the data-processing pipeline in the background.
+
+    train_type 'create' uses the given train_id; 'existing' clones it to a new run.
+    """
     if verify_user_id(user_id):
         if train_type == "create":
             insert_train_parameters_to_db(train_id, parameters)
@@ -109,11 +129,13 @@ async def trigger_dp(background_tasks: BackgroundTasks, user_id: int = Form(...)
 
 @app.get('/get-default-forecasting-parameters')
 async def get_dp_parameters():
+    """Return the default forecasting parameters and their allowed ranges."""
     return {"status": "SUCCESS", "parameters": get_default_fcst_parameters()}, 200
 
 
 @app.post('/get-fcst-train-ids')
 async def get_fcst_train(user_id: int = Form(...), train_type: str = Form(...)):
+    """List train_ids eligible for forecasting (new vs. re-run) for a user."""
     if verify_user_id(user_id):
         train_id = get_fcst_train_ids(train_type, user_id)
         return {"status": "SUCCESS", "train_id": train_id}, 200
@@ -123,6 +145,10 @@ async def get_fcst_train(user_id: int = Form(...), train_type: str = Form(...)):
 
 @app.post('/trigger-forecasting')
 async def trigger_fcst(background_tasks: BackgroundTasks, user_id: int = Form(...), train_id: int = Form(...), parameters: str = Form(...), train_type: str = Form(...)):
+    """Persist parameters and run the forecasting pipeline in the background.
+
+    train_type 'create' uses the given train_id; 'existing' clones it to a new run.
+    """
     if verify_user_id(user_id):
         if train_type == "create":
             insert_train_parameters_to_db(train_id, parameters)
@@ -138,6 +164,7 @@ async def trigger_fcst(background_tasks: BackgroundTasks, user_id: int = Form(..
 
 @app.post('/trigger-metrics-calculation')
 async def trigger_metric_calculation(user_id: int = Form(...), train_id: int = Form(...)):
+    """Compute performance metrics for a run, unless they already exist (runs inline)."""
     if verify_user_id(user_id):
         if not verify_metrics_exists(train_id):
             calculate_metric(train_id)
@@ -150,6 +177,7 @@ async def trigger_metric_calculation(user_id: int = Form(...), train_id: int = F
 
 @app.post('/status')
 async def fetch_run_status(user_id: int = Form(...)):
+    """Return the run history (stage phases, statuses, timings) for a user."""
     if verify_user_id(user_id):
         data = get_train_history(user_id)
         return {"status": "SUCCESS", "data": data}, 200

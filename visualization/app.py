@@ -1,3 +1,9 @@
+"""Streamlit dashboard: explore a run's processed history, forecasts, and metrics.
+
+Selected by ``user_id`` (query param or session), then by train_id and ts_id. Renders
+actual-vs-processed history, forecast overlays, performance/drift metrics, and an
+overall model ranking. Reads MySQL directly via db_wrapper.
+"""
 import plotly.express as px
 from db_wrapper import get_list_of_train_data_id, get_data, get_metric_data, get_forecast_data
 import streamlit as st
@@ -7,11 +13,12 @@ st.set_page_config(page_title="Visualization", layout="wide",
                    initial_sidebar_state="expanded", page_icon="image/line-chart.png")
 st.header("Visualization of Time Series Data")
 
-if 'user_id' in st.query_params.to_dict().keys():
-    user_id = st.query_params.to_dict()['user_id'][0]
-    st.session_state.user_id = user_id[0]
-elif 'user_id' in st.session_state.keys():
-    user_id = st.session_state.user_id[0]
+if 'user_id' in st.query_params:
+    # st.query_params returns scalar strings; keep the whole value (don't index a char)
+    user_id = st.query_params['user_id']
+    st.session_state.user_id = user_id
+elif 'user_id' in st.session_state:
+    user_id = st.session_state.user_id
 else:
     st.error('No user_id provided')
     st.stop()
@@ -88,6 +95,7 @@ st.plotly_chart(fig, use_container_width=True)
 
 
 def ks_metric(val):
+    """Map a KS p-value to a drift label ('Yes' if < 0.05 else 'No')."""
     if val < 0.05:
         return 'Yes'
     else:
@@ -95,6 +103,7 @@ def ks_metric(val):
 
 
 def psi_metric(val):
+    """Map a PSI value to a drift label ('No' < 0.1, 'Slight' < 0.2, else 'Extreme')."""
     if val < 0.1:
         return 'No'
     elif val < 0.2:

@@ -1,9 +1,11 @@
+"""Read-only DB access for the Streamlit dashboard (history, forecasts, metrics)."""
 from config import database_utils
 from sqlalchemy import create_engine, text
 import pandas as pd
 
 
 def db_engine():
+    """Build a SQLAlchemy engine for the configured MySQL database."""
     conn_url = f'{database_utils["DRIVER"]}://{database_utils["USER"]}:{database_utils["PASSWORD"]}@' \
                f'{database_utils["HOST"]}:{database_utils["PORT"]}/{database_utils["DATABASE"]}'
     engine = create_engine(conn_url, echo=False)
@@ -11,6 +13,7 @@ def db_engine():
 
 
 def get_list_of_train_data_id(user_id):
+    """Return a user's completed (FCST_E) runs and their ingest/dp/fcst data_ids."""
     engine = db_engine()
     conn = engine.connect()
     query = text(
@@ -29,6 +32,7 @@ def get_list_of_train_data_id(user_id):
 
 
 def get_data(data_ing_id, data_dp_id):
+    """Return raw vs. processed history per period/ts_id for a run (merged)."""
     engine = db_engine()
     conn = engine.connect()
     query = text("select period, ts_id, value from data_table where data_id = :data_id")
@@ -43,6 +47,7 @@ def get_data(data_ing_id, data_dp_id):
 
 
 def get_forecast_data(train_id):
+    """Return actuals joined with forecast rows (per split/model) for a run."""
     engine = db_engine()
     conn = engine.connect()
     data_ing_id = conn.execute(
@@ -68,6 +73,7 @@ def get_forecast_data(train_id):
 
 
 def get_metric_data(train_id):
+    """Return per-ts/model/split metric values (with names) for a run."""
     engine = db_engine()
     conn = engine.connect()
     query = text(

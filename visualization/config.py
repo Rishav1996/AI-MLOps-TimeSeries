@@ -1,3 +1,7 @@
+"""Visualization config: DB connection settings and parameter_table ID maps.
+
+Mirrors the backend packages' configs; the dashboard reads MySQL directly.
+"""
 database_utils = {
     'HOST': 'db',
     'PORT': 3306,

@@ -1,3 +1,9 @@
+"""Data-processing stage: per-series outlier detection then imputation via Celery.
+
+``main`` orchestrates the stage for a train_id — it reads the ingested rows, fans the
+work out to ``outlier_wrapper`` and ``impute_wrapper`` Celery tasks (one per series),
+writes the cleaned rows under a new data_id, and advances the run's status flags.
+"""
 from data_processing.imputers import linear_imputer, mean_imputer, median_imputer, nearest_imputer
 from data_processing.outliers import isolation_forest_detector, local_outlier_factor_detector, zscore_detector
 
@@ -14,6 +20,7 @@ warnings.filterwarnings("ignore")
 
 
 def get_ingest_id(train_id):
+    """Return the ingested data_id (data_ing_id) for a run."""
     engine = db_engine()
     conn = engine.connect()
     data_id = conn.execute(
@@ -24,6 +31,7 @@ def get_ingest_id(train_id):
 
 
 def get_user_id(train_id):
+    """Return the owning user_id for a run."""
     engine = db_engine()
     conn = engine.connect()
     user_id = conn.execute(
@@ -34,6 +42,7 @@ def get_user_id(train_id):
 
 
 def insert_data_id(data_id, user_id, data_proc_flag):
+    """Register a new processed-output data_id in data_history_table."""
     engine = db_engine()
     conn = engine.connect()
     conn.execute(
@@ -45,6 +54,7 @@ def insert_data_id(data_id, user_id, data_proc_flag):
 
 
 def generate_dp_id():
+    """Allocate the next data_id (max + 1) for the processed output."""
     engine = db_engine()
     conn = engine.connect()
     data_id = conn.execute(text("select ifnull(max(data_id), 0) from data_history_table")).fetchone()[0] + 1
@@ -53,6 +63,7 @@ def generate_dp_id():
 
 
 def set_dp_start_time(train_id):
+    """Stamp the data-processing start time for a run."""
     engine = db_engine()
     conn = engine.connect()
     conn.execute(text("update train_history_table set dp_start_time=:now where train_id=:train_id"),
@@ -62,6 +73,7 @@ def set_dp_start_time(train_id):
 
 
 def set_dp_end_time(train_id):
+    """Stamp the data-processing end time for a run."""
     engine = db_engine()
     conn = engine.connect()
     conn.execute(text("update train_history_table set dp_end_time=:now where train_id=:train_id"),
@@ -71,6 +83,7 @@ def set_dp_end_time(train_id):
 
 
 def get_data(data_id):
+    """Load (period, ts_id, value) rows for a data_id as a DataFrame."""
     engine = db_engine()
     conn = engine.connect()
     data = conn.execute(text("select period, ts_id, value from data_table where data_id=:data_id"),
@@ -82,6 +95,7 @@ def get_data(data_id):
 
 
 def set_dp_flag(train_id, flag):
+    """Set a run's status flag (e.g. DP_S/DP_P1/DP_E/DP_F)."""
     engine = db_engine()
     conn = engine.connect()
     conn.execute(text("update train_history_table set status=:flag where train_id=:train_id"),
@@ -91,6 +105,7 @@ def set_dp_flag(train_id, flag):
 
 
 def set_dp_id(train_id, data_id):
+    """Link the processed-output data_id (data_dp_id) to a run."""
     engine = db_engine()
     conn = engine.connect()
     conn.execute(text("update train_history_table set data_dp_id=:data_id where train_id=:train_id"),
@@ -101,6 +116,7 @@ def set_dp_id(train_id, data_id):
 
 @celery_client.task(autoretry_for=(Exception,), default_retry_delay=5, retry_kwargs={'max_retries': 3})
 def outlier_wrapper(dataset, outlier_choice, outlier_cnt, zscore_cutoff):
+    """Celery task: run the chosen outlier detector on one series; returns a dict."""
     dataset = pd.DataFrame(dataset)
     dataset.index = dataset['period'].map(pd.to_datetime)
     dataset.sort_index(inplace=True)
@@ -116,6 +132,7 @@ def outlier_wrapper(dataset, outlier_choice, outlier_cnt, zscore_cutoff):
 
 @celery_client.task(autoretry_for=(Exception,), default_retry_delay=5, retry_kwargs={'max_retries': 3})
 def impute_wrapper(dataset, impute_choice, impute_if_zero):
+    """Celery task: run the chosen imputer on one series; returns a dict."""
     dataset = pd.DataFrame(dataset)
     dataset.index = dataset['period'].map(pd.to_datetime)
     dataset.sort_index(inplace=True)
@@ -132,6 +149,12 @@ def impute_wrapper(dataset, impute_choice, impute_if_zero):
 
 
 def main(train_id):
+    """Run the full data-processing stage for a run.
+
+    Reads the ingested series, dispatches outlier-detection then imputation Celery
+    tasks per ts_id, writes the cleaned rows under a new data_id, and sets the
+    run status to DP_E (or DP_F on failure).
+    """
     data_id = get_ingest_id(train_id)
     user_id = get_user_id(train_id)
     parameters = get_default_parameters_in_dict()

@@ -1,9 +1,11 @@
+"""ETS / exponential-smoothing forecaster wrapper (sktime ExponentialSmoothing)."""
 from sktime.forecasting.all import ExponentialSmoothing
 import pandas as pd
 from forecasting.forecasting_helper import seasonal_period
 
 
 def model(data, forecast_length):
+    """Fit additive ExponentialSmoothing on 'value' (shifted +1) and forecast."""
     sp = seasonal_period(data.index, default=2)
     data = pd.DataFrame(data.values, columns=data.columns)
     if data.shape[0] < (2 * sp):

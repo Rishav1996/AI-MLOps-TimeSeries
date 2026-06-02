@@ -1,3 +1,7 @@
+"""Data-processing config: DB connection settings and parameter_table ID maps.
+
+Mirrors the IDs in ``parameter_table``; kept in sync with the other packages' configs.
+"""
 from global_config import MYSQL_IP, MYSQL_PORT
 
 database_utils = {

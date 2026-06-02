@@ -1,3 +1,4 @@
+"""Data-processing helpers: DB access, parameter lookup, and Celery task waiting."""
 import time
 from sqlalchemy import create_engine
 from datetime import datetime
@@ -7,6 +8,7 @@ import pandas as pd
 
 
 def get_time_now():
+    """Current timestamp as a 'YYYY-MM-DD HH:MM:SS' string for DB columns."""
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
@@ -29,6 +31,7 @@ def wait_for_tasks(task_ids, poll_interval=0.5):
 
 
 def db_engine():
+    """Build a SQLAlchemy engine for the configured MySQL database."""
     conn_url = f'{database_utils["DRIVER"]}://{database_utils["USER"]}:{database_utils["PASSWORD"]}@' \
                f'{database_utils["HOST"]}:{database_utils["PORT"]}/{database_utils["DATABASE"]}'
     engine = create_engine(conn_url, echo=False)
@@ -36,6 +39,7 @@ def db_engine():
 
 
 def get_default_parameters_in_dict():
+    """Return all parameter_table rows as a {parameter_id: value} dict."""
     engine = db_engine()
     conn = engine.connect()
     parameters = conn.execute(text("select parameter_id, parameter_value from parameter_table")).fetchall()
@@ -48,6 +52,7 @@ def get_default_parameters_in_dict():
 
 
 def get_default_parameters_in_dataframe():
+    """Return parameter_table (id, name, value, allowed ranges) as a DataFrame."""
     engine = db_engine()
     conn = engine.connect()
     parameters = conn.execute(text("select parameter_id, parameter_name, parameter_value, parameter_range_values from parameter_table")).fetchall()
@@ -58,6 +63,7 @@ def get_default_parameters_in_dataframe():
 
 
 def get_train_parameters_in_dict(train_id):
+    """Return a run's chosen parameters as a {parameter_id: value} dict."""
     engine = db_engine()
     conn = engine.connect()
     parameters = conn.execute(

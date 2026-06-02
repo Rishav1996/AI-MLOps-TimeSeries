@@ -1,3 +1,10 @@
+"""Forecasting stage: per-series, per-model backtesting over CV windows via Celery.
+
+``main`` orchestrates the stage for a train_id — it reads the processed series, fans
+out ``simple_forecasting`` (single models) and ``ensemble_forecasts`` (ensemble/
+auto-ensemble) Celery tasks, records PSI/KS stability metrics per split, writes the
+forecast rows under a new data_id, and advances the run's status flags.
+"""
 import getopt, sys
 from datetime import datetime
 from forecasting.ensemble_models import ensemble_model, auto_ensemble_model
@@ -19,6 +26,7 @@ warnings.filterwarnings("ignore")
 
 
 def get_data_processing_id(train_id):
+    """Return the processed-data data_id (data_dp_id) for a run."""
     engine = db_engine()
     conn = engine.connect()
     data_id = conn.execute(
@@ -29,6 +37,7 @@ def get_data_processing_id(train_id):
 
 
 def get_user_id(train_id):
+    """Return the owning user_id for a run."""
     engine = db_engine()
     conn = engine.connect()
     user_id = conn.execute(
@@ -39,6 +48,7 @@ def get_user_id(train_id):
 
 
 def fetch_models_list():
+    """Return the model registry as a {model_id: model_name} dict."""
     engine = db_engine()
     conn = engine.connect()
     models = conn.execute(text("select model_id, model_name from model_table")).fetchall()
@@ -51,6 +61,7 @@ def fetch_models_list():
 
 
 def generate_fcst_id():
+    """Allocate the next data_id (max + 1) for the forecast output."""
     engine = db_engine()
     conn = engine.connect()
     data_id = conn.execute(text("select ifnull(max(data_id), 0) from data_history_table")).fetchone()[0] + 1
@@ -59,6 +70,7 @@ def generate_fcst_id():
 
 
 def get_data(data_id):
+    """Load (period, ts_id, value) rows for a data_id as a DataFrame."""
     engine = db_engine()
     conn = engine.connect()
     data = conn.execute(text("select period, ts_id, value from data_table where data_id=:data_id"),
@@ -70,6 +82,7 @@ def get_data(data_id):
 
 
 def get_model(model_id):
+    """Return the model_name for a model_id."""
     engine = db_engine()
     conn = engine.connect()
     model = conn.execute(text("select model_name from model_table where model_id=:model_id"),
@@ -80,6 +93,11 @@ def get_model(model_id):
 
 def models_forecasts(train, forecast_length, future_periods, model_name='', model_lists=None, ensemble=False,
                      auto_ensemble=False):
+    """Fit the requested model (or ensemble) on a train window and return a forecast.
+
+    Dispatches to the matching model wrapper by name, or to the ensemble/auto-ensemble
+    wrappers (using model_lists) when those flags are set; reindexes onto future_periods.
+    """
     forecast_length = ForecastingHorizon(list(range(1, forecast_length + 1)))
     if model_name == 'arima':
         forecasts = auto_arima_model.model(train, forecast_length)
@@ -137,6 +155,7 @@ def models_forecasts(train, forecast_length, future_periods, model_name='', mode
 
 
 def insert_metric(train_id, ts_id, model_id, split_window, split_no, metric_id, metric_value):
+    """Insert one stability-metric value (per ts/model/split) into train_metric_table."""
     engine = db_engine()
     conn = engine.connect()
     conn.execute(
@@ -149,6 +168,7 @@ def insert_metric(train_id, ts_id, model_id, split_window, split_no, metric_id, 
 
 
 def get_metrics_list():
+    """Return the metric registry as a {metric_name: metric_id} dict."""
     engine = db_engine()
     conn = engine.connect()
     metrics_list = conn.execute(text("select metric_id, metric_name from metric_table")).fetchall()
@@ -159,6 +179,11 @@ def get_metrics_list():
 
 @celery_client.task(autoretry_for=(Exception,), default_retry_delay=5, retry_kwargs={'max_retries': 3})
 def simple_forecasting(data, test_size, forecast_horizon, data_split, train_id):
+    """Celery task: backtest a single (series, model) over CV windows.
+
+    Builds expanding/sliding splits, forecasts each test window, records PSI/KS
+    stability metrics per split, and returns the forecast rows as a dict.
+    """
     data = pd.DataFrame(data)
     if 'value' not in data.columns or 'period' not in data.columns or 'key' not in data.columns:
         return
@@ -224,6 +249,11 @@ def simple_forecasting(data, test_size, forecast_horizon, data_split, train_id):
 
 @celery_client.task(autoretry_for=(Exception,), default_retry_delay=5, retry_kwargs={'max_retries': 3})
 def ensemble_forecasts(data, test_size, forecast_horizon, data_split, model_ids, train_id, ensemble=False, auto_ensemble=False):
+    """Celery task: backtest an ensemble (or auto-ensemble) of model_ids over CV windows.
+
+    Mirrors simple_forecasting but combines the selected base models; records stability
+    metrics per split and returns the forecast rows as a dict.
+    """
     data = pd.DataFrame(data)
     if 'value' not in data.columns or 'period' not in data.columns or 'ts_id' not in data.columns:
         return
@@ -310,6 +340,7 @@ def ensemble_forecasts(data, test_size, forecast_horizon, data_split, model_ids,
 
 
 def set_fcst_flag(train_id, flag):
+    """Set a run's status flag (e.g. FCST_S/FCST_P1/FCST_E/FCST_F)."""
     engine = db_engine()
     conn = engine.connect()
     conn.execute(text("update train_history_table set status=:flag where train_id=:train_id"),
@@ -319,6 +350,7 @@ def set_fcst_flag(train_id, flag):
 
 
 def set_fcst_start_time(train_id):
+    """Stamp the forecasting start time for a run."""
     engine = db_engine()
     conn = engine.connect()
     conn.execute(text("update train_history_table set fcst_start_time=:now where train_id=:train_id"),
@@ -328,6 +360,7 @@ def set_fcst_start_time(train_id):
 
 
 def set_fcst_end_time(train_id):
+    """Stamp the forecasting end time for a run."""
     engine = db_engine()
     conn = engine.connect()
     conn.execute(text("update train_history_table set fcst_end_time=:now where train_id=:train_id"),
@@ -337,6 +370,7 @@ def set_fcst_end_time(train_id):
 
 
 def set_fcst_id(train_id, data_id):
+    """Link the forecast-output data_id (data_fcst_id) to a run."""
     engine = db_engine()
     conn = engine.connect()
     conn.execute(text("update train_history_table set data_fcst_id=:data_id where train_id=:train_id"),
@@ -346,6 +380,7 @@ def set_fcst_id(train_id, data_id):
 
 
 def insert_data_id(data_id, user_id, data_proc_flag):
+    """Register a new forecast-output data_id in data_history_table."""
     engine = db_engine()
     conn = engine.connect()
     conn.execute(
@@ -357,11 +392,18 @@ def insert_data_id(data_id, user_id, data_proc_flag):
 
 
 def delete_objects(dataset_ids):
+    """Best-effort cleanup of local references to large intermediate objects."""
     for i in dataset_ids:
         del i
 
 
 def main(train_id):
+    """Run the full forecasting stage for a run.
+
+    Reads the processed series, dispatches per-series simple_forecasting tasks (and
+    ensemble/auto-ensemble tasks when enabled), writes the forecast rows under a new
+    data_id, and sets the run status to FCST_E (or FCST_F on failure).
+    """
     data_id = get_data_processing_id(train_id)
     user_id = get_user_id(train_id)
     parameters = get_default_parameters_in_dict()

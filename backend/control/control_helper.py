@@ -1,3 +1,8 @@
+"""Control-layer helpers: DB access, auth, parameter lookup, and run bookkeeping.
+
+Shared by the API endpoints (in app.py) and the ingestion orchestration in
+control_modal.py. All SQL uses bound parameters; writes commit before closing.
+"""
 import json
 from sqlalchemy import create_engine, text
 from datetime import datetime
@@ -8,10 +13,12 @@ import pandas as pd
 
 
 def get_time_now():
+    """Current timestamp as a 'YYYY-MM-DD HH:MM:SS' string for DB columns."""
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
 def db_engine():
+    """Build a SQLAlchemy engine for the configured MySQL database."""
     conn_url = f'{database_utils["DRIVER"]}://{database_utils["USER"]}:{database_utils["PASSWORD"]}@' \
                f'{database_utils["HOST"]}:{database_utils["PORT"]}/{database_utils["DATABASE"]}'
     engine = create_engine(conn_url, echo=False)
@@ -19,10 +26,12 @@ def db_engine():
 
 
 def password_hashing(text: str):
+    """Return the MD5 hex digest of a password for storage/comparison."""
     return str(hashlib.md5(text.encode()).hexdigest())
 
 
 def get_default_parameters_in_dict():
+    """Return all parameter_table rows as a {parameter_id: value} dict."""
     engine = db_engine()
     conn = engine.connect()
     parameters = conn.execute(text("select parameter_id, parameter_value from parameter_table")).fetchall()
@@ -35,6 +44,7 @@ def get_default_parameters_in_dict():
 
 
 def get_default_parameters_in_dataframe():
+    """Return parameter_table (id, name, value, allowed ranges) as a DataFrame."""
     engine = db_engine()
     conn = engine.connect()
     parameters = conn.execute(
@@ -46,6 +56,7 @@ def get_default_parameters_in_dataframe():
 
 
 def get_user_id(user_name):
+    """Return the user_id for a username, or 0 if it does not exist."""
     engine = db_engine()
     conn = engine.connect()
     user_id = conn.execute(
@@ -56,6 +67,7 @@ def get_user_id(user_name):
 
 
 def insert_user(user_name, user_password):
+    """Insert a new user with an MD5-hashed password."""
     engine = db_engine()
     conn = engine.connect()
     conn.execute(
@@ -67,6 +79,7 @@ def insert_user(user_name, user_password):
 
 
 def verify_user(user_name, user_password):
+    """Return True if the username exists and the password hash matches."""
     engine = db_engine()
     conn = engine.connect()
     if get_user_id(user_name) > 0:
@@ -82,6 +95,7 @@ def verify_user(user_name, user_password):
 
 
 def verify_user_id(user_id):
+    """Return True if a user with this id exists."""
     engine = db_engine()
     conn = engine.connect()
     count = conn.execute(
@@ -92,6 +106,10 @@ def verify_user_id(user_id):
 
 
 def get_dp_train_ids(train_type, user_id):
+    """List a user's train_ids ready for data processing.
+
+    'create' = ingested but not yet processed; 'existing' = already processed (re-run).
+    """
     engine = db_engine()
     conn = engine.connect()
     train_ids = []
@@ -112,6 +130,10 @@ def get_dp_train_ids(train_type, user_id):
 
 
 def get_fcst_train_ids(train_type, user_id):
+    """List a user's train_ids ready for forecasting.
+
+    'create' = processed but not yet forecast; 'existing' = already forecast (re-run).
+    """
     engine = db_engine()
     conn = engine.connect()
     train_ids = []
@@ -132,6 +154,7 @@ def get_fcst_train_ids(train_type, user_id):
 
 
 def get_default_dp_parameters():
+    """Return only the data-processing parameters (name/value/range) for the UI."""
     parameters = get_default_parameters_in_dataframe()
     parameters = parameters[parameters['parameter_id'].isin(list(data_processing_parameters.values()))]
     parameters = parameters[['parameter_name', 'parameter_value', 'parameter_range_values']]
@@ -140,6 +163,7 @@ def get_default_dp_parameters():
 
 
 def get_default_fcst_parameters():
+    """Return only the forecasting parameters (name/value/range) for the UI."""
     parameters = get_default_parameters_in_dataframe()
     parameters = parameters[parameters['parameter_id'].isin(list(forecasting_parameters.values()))]
     parameters = parameters[['parameter_name', 'parameter_value', 'parameter_range_values']]
@@ -148,6 +172,7 @@ def get_default_fcst_parameters():
 
 
 def copy_existing_dp_data_id(train_id):
+    """Clone a run's ingested data into a new train_id for re-processing; return it."""
     engine = db_engine()
     conn = engine.connect()
     data_id = conn.execute(
@@ -167,6 +192,7 @@ def copy_existing_dp_data_id(train_id):
 
 
 def copy_existing_fcst_data_id(train_id):
+    """Clone a run's ingested+processed data into a new train_id for re-forecasting."""
     engine = db_engine()
     conn = engine.connect()
     data_ing_id = conn.execute(
@@ -190,6 +216,10 @@ def copy_existing_fcst_data_id(train_id):
 
 
 def insert_train_parameters_to_db(train_id, parameters):
+    """Store a run's chosen parameters (JSON of name->value) in train_parameter_table.
+
+    Parameter names are resolved to their IDs via parameter_table before insert.
+    """
     engine = db_engine()
     parameters = json.loads(parameters)
     parameters = [[i, parameters[i]] for i in parameters.keys()]
@@ -203,6 +233,7 @@ def insert_train_parameters_to_db(train_id, parameters):
 
 
 def verify_metrics_exists(train_id):
+    """Return True if performance metrics (excluding ensemble ids 7/8) already exist."""
     engine = db_engine()
     conn = engine.connect()
     metrics = conn.execute(
@@ -213,6 +244,7 @@ def verify_metrics_exists(train_id):
 
 
 def convert_to_time(seconds):
+    """Format a duration in seconds as a 'H h MM m SS s' string."""
     seconds = seconds % (24 * 3600)
     hour = seconds // 3600
     seconds %= 3600
@@ -222,13 +254,22 @@ def convert_to_time(seconds):
 
 
 def get_train_history(user_id):
+    """Return a user's runs as JSON: ids, per-stage durations, and phase/status.
+
+    Each row's status is split into a `phase` (ING/DP/FCST) and `c_status`
+    (first letter of the stage state) for the UI; missing values render as '-'.
+    """
     engine = db_engine()
     conn = engine.connect()
+    # TIMESTAMPDIFF gives true elapsed seconds; plain datetime subtraction in MySQL
+    # yields a meaningless packed YYYYMMDDHHMMSS number.
     query = text("""SELECT
                     th.train_id, th.data_ing_id, th.data_dp_id,
-                    th.data_fcst_id, th.ing_end_time - th.ing_start_time as ing_time,
-                    th.dp_end_time - th.dp_start_time as dp_time,
-                    th.fcst_end_time - th.fcst_start_time as fcst_time, th.status
+                    th.data_fcst_id,
+                    TIMESTAMPDIFF(SECOND, th.ing_start_time, th.ing_end_time) as ing_time,
+                    TIMESTAMPDIFF(SECOND, th.dp_start_time, th.dp_end_time) as dp_time,
+                    TIMESTAMPDIFF(SECOND, th.fcst_start_time, th.fcst_end_time) as fcst_time,
+                    th.status
                 FROM mlops_ts_fcst.train_history_table th
                 inner join mlops_ts_fcst.data_history_table dh on (th.data_ing_id = dh.data_id)
                 where dh.user_id = :user_id""")

@@ -100,12 +100,12 @@ export default class App extends Component {
           </Menu.Item>
           <Menu.Menu position="right">
             <Menu.Item>
-              <a target="_blank" href="localhost:5555">
+              <a target="_blank" rel="noopener noreferrer" href="http://localhost:5555">
                 Task Monitor
               </a>
             </Menu.Item>
             <Menu.Item>
-              <a target="_blank" href={"localhost:8501/?user_id="+this.state.user_id}>
+              <a target="_blank" rel="noopener noreferrer" href={"http://localhost:8501/?user_id=" + this.state.user_id}>
                 Visualization
               </a>
             </Menu.Item>

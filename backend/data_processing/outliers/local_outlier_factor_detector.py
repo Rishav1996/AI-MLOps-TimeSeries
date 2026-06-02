@@ -1,9 +1,11 @@
+"""Local Outlier Factor outlier detection for a single series (scikit-learn)."""
 from sklearn.neighbors import LocalOutlierFactor
 import pandas as pd
 import numpy as np
 
 
 def detector(data, contamination='auto'):
+    """Flag Local-Outlier-Factor outliers in 'value' as NaN; contamination 'auto' or float."""
     data = data.copy()
     if contamination != 'auto':
         contamination = float(contamination)

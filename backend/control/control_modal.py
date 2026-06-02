@@ -1,3 +1,8 @@
+"""Ingestion orchestration: ID generation, CSV load, and pipeline entrypoints.
+
+``ingest_data`` is the ingestion stage itself (run as a background task); the
+``*_pipeline`` wrappers hand off to the data-processing and forecasting packages.
+"""
 import os
 
 import pandas as pd
@@ -11,6 +16,7 @@ from forecasting import forecasting_pipeline as fp
 
 
 def generate_ingest_id():
+    """Allocate the next train_id and data_id (max + 1) for a new ingestion."""
     engine = db_engine()
     conn = engine.connect()
     train_id = conn.execute(text("select ifnull(max(train_id), 0) from train_history_table")).fetchone()[0] + 1
@@ -20,6 +26,7 @@ def generate_ingest_id():
 
 
 def ingest_parameters(train_id, parameters):
+    """Insert a {parameter_id: value} mapping into train_history_table for a run."""
     engine = db_engine()
     conn = engine.connect()
     for parameter_id, parameter_value in parameters.items():
@@ -31,6 +38,11 @@ def ingest_parameters(train_id, parameters):
 
 
 def ingest_data(train_id, data_id, file_name, user_id):
+    """Load an uploaded CSV into data_table, advancing status flags as it goes.
+
+    Writes the rows under a new data_id, records timings in train_history_table, and
+    archives the source CSV to control/ingested (or control/failed on error).
+    """
     try:
         os.makedirs("./control/ingested", exist_ok=True)
         os.makedirs("./control/failed", exist_ok=True)
@@ -120,8 +132,10 @@ def ingest_data(train_id, data_id, file_name, user_id):
 
 
 def data_processing_pipeline(train_id):
+    """Background-task entrypoint that runs the data-processing stage for a run."""
     dpp.main(train_id)
 
 
 def forecasting_pipeline(train_id):
+    """Background-task entrypoint that runs the forecasting stage for a run."""
     fp.main(train_id)

@@ -1,3 +1,8 @@
+"""Metrics stage: compute per-series/model/split performance metrics for a run.
+
+``calculate_metric`` joins a run's actuals with its forecast rows, computes each
+performance metric per (ts_id, model, split), and writes them to train_metric_table.
+"""
 from metrics.metrics_config import database_utils
 from metrics.metrics_helper import db_engine
 from metrics.performance_metrics import rmse_metric, rmspe_metric, mape_metric, aic_metric, bic_metric, bias_metric
@@ -6,6 +11,7 @@ import pandas as pd
 
 
 def get_data(train_id):
+    """Join a run's ingested actuals with its forecast rows (outer) for metrics."""
     engine = db_engine()
     conn = engine.connect()
     ing_id, fcst_id = conn.execute(
@@ -28,6 +34,7 @@ def get_data(train_id):
 
 
 def get_metrics_list():
+    """Return the metric registry as a {metric_name: metric_id} dict."""
     engine = db_engine()
     conn = engine.connect()
     metrics_list = conn.execute(text("select metric_id, metric_name from metric_table")).fetchall()
@@ -37,6 +44,11 @@ def get_metrics_list():
 
 
 def generate_metrics(data):
+    """Compute all performance metrics for one (ts_id, model, split) group.
+
+    Aligns actual/forecast pairs (dropping unmatched periods) and returns a DataFrame
+    of metric_name/metric_value rows; returns None if there is nothing to score.
+    """
     if 'period' not in data.columns or 'historical' not in data.columns or 'forecast' not in data.columns:
         return
 
@@ -80,6 +92,7 @@ def generate_metrics(data):
 
 
 def calculate_metric(train_id):
+    """Compute and persist performance metrics for every series/model/split of a run."""
     data = get_data(train_id)
 
     test_data = data[~data['forecast'].isna()].copy()

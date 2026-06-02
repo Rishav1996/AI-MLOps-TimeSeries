@@ -1,8 +1,9 @@
+"""Population Stability Index (PSI): distribution-drift between two samples."""
 import numpy as np
 
 
 def metric_loss(expected, actual, bucket_type='bins', buckets=10, axis=0):
-
+    """Return the PSI between expected and actual arrays (higher = more drift)."""
     expected = np.array(expected).flatten()
     actual = np.array(actual).flatten()
 
