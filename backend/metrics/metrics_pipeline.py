@@ -7,6 +7,7 @@ from metrics.metrics_config import database_utils
 from metrics.metrics_helper import db_engine
 from metrics.performance_metrics import rmse_metric, rmspe_metric, mape_metric, aic_metric, bic_metric, bias_metric
 from sqlalchemy import text
+import numpy as np
 import pandas as pd
 
 
@@ -92,24 +93,36 @@ def generate_metrics(data):
 
 
 def calculate_metric(train_id):
-    """Compute and persist performance metrics for every series/model/split of a run."""
+    """Compute and persist performance metrics for every series/model/split of a run.
+
+    Rows whose metric could not be computed to a finite number are dropped before
+    the insert: train_metric_table.metric_value is NOT NULL, so a single NaN/inf
+    would abort the whole write with an IntegrityError.
+    """
     data = get_data(train_id)
 
     test_data = data[~data['forecast'].isna()].copy()
+    if test_data.empty:
+        return
     test_data['key'] = test_data['ts_id'].map(str) + '_' + test_data['model_id'].map(str) + '_' + test_data[
         'split_window'].map(str) + '_' + test_data['split_no'].map(str)
     metric_result = test_data.groupby('key')[['period', 'historical', 'forecast']].apply(generate_metrics).reset_index(
         level=0)
+    if metric_result.empty or 'metric_value' not in metric_result.columns:
+        return
     metric_result['train_id'] = train_id
     metric_result['ts_id'] = metric_result['key'].str.split('_').str[0]
     metric_result['model_id'] = metric_result['key'].str.split('_').str[1]
     metric_result['split_window'] = metric_result['key'].str.split('_').str[2]
     metric_result['split_no'] = metric_result['key'].str.split('_').str[3]
 
-    actual_data = data.drop_duplicates(subset=['ts_id', 'period'], keep='first').copy()
-    actual_data.sort_values(by=['ts_id', 'period'], inplace=True)
-
     metric_result.drop(columns=['key'], inplace=True)
+
+    # train_metric_table.metric_value is NOT NULL; never insert a NaN/inf value
+    metric_result['metric_value'] = pd.to_numeric(metric_result['metric_value'], errors='coerce')
+    metric_result = metric_result[np.isfinite(metric_result['metric_value'])]
+    if metric_result.empty:
+        return
 
     engine = db_engine()
     metric_result.to_sql('train_metric_table', engine, schema=database_utils["DATABASE"],
