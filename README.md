@@ -135,15 +135,17 @@ Override the target with `API_BASE_URL`.
 
 ## 7. Input data format
 
-Uploaded CSVs must have exactly these columns:
+Uploaded CSVs must have these columns (order doesn't matter):
 
 | Column   | Description                                      |
 | -------- | ------------------------------------------------ |
-| `period` | Date string, `YYYY-MM-DD` (stored as `VARCHAR(10)`) |
+| `period` | Date string. `YYYY-MM-DD` is canonical; `DD-MM-YYYY` is also accepted and normalized on ingestion (stored as `VARCHAR(10)`) |
 | `ts_id`  | Integer series identifier                        |
 | `value`  | Numeric observation                              |
 
-Multiple series share one file, distinguished by `ts_id`.
+Multiple series share one file, distinguished by `ts_id`. A ready-to-use example is
+provided at [`sample data/sample.csv`](sample%20data/sample.csv) (two monthly series,
+2020–2021).
 
 ## 8. Project layout
 

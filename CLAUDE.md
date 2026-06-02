@@ -144,7 +144,7 @@ Data processing and forecasting both split work by `ts_id` (and by model for for
 
 ### Input Data Format
 
-CSVs uploaded via `/upload-ingestion-data` must have columns: `period` (`YYYY-MM-DD`), `ts_id`, `value`.
+CSVs uploaded via `/upload-ingestion-data` must have columns: `period`, `ts_id`, `value`. `ingest_data` normalizes `period` to `YYYY-MM-DD` via `pd.to_datetime(..., dayfirst=True)`, so `DD-MM-YYYY` inputs also work. A sample is committed at `sample data/sample.csv`.
 
 ### Forecasting Models
 
