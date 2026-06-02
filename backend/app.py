@@ -1,3 +1,5 @@
+import os
+
 from fastapi import FastAPI, File, UploadFile, Form, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -66,6 +68,7 @@ async def upload_ingestion_data(background_tasks: BackgroundTasks, user_id: int 
         return {"status": "FAILURE", "message": "File is required"}, 400
     if verify_user_id(user_id):
         train_id, data_id = generate_ingest_id()
+        os.makedirs("control/raw_data", exist_ok=True)
         file_location = f"control/raw_data/{file.filename}"
         with open(file_location, "wb+") as file_object:
             file_object.write(file.file.read())

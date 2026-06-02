@@ -41,7 +41,9 @@ def get_default_parameters_in_dataframe():
 def get_train_parameters_in_dict(train_id):
     engine = db_engine()
     conn = engine.connect()
-    parameters = conn.execute(text(f"select parameter_id, train_value from train_parameter_table where train_id = {train_id}")).fetchall()
+    parameters = conn.execute(
+        text("select parameter_id, train_value from train_parameter_table where train_id = :train_id"),
+        {"train_id": train_id}).fetchall()
     parameters = pd.DataFrame(parameters)
     parameters.columns = ['parameter_id', 'parameter_value']
     parameters = {parameter['parameter_id']: parameter['parameter_value'] for parameter in

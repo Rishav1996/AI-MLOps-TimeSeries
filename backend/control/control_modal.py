@@ -23,14 +23,17 @@ def ingest_parameters(train_id, parameters):
     engine = db_engine()
     conn = engine.connect()
     for parameter_id, parameter_value in parameters.items():
-        conn.execute(text(f"insert into train_history_table (train_id, parameter_id, parameter_value) "
-                     f"values ({train_id}, {parameter_id}, '{parameter_value}')"))
+        conn.execute(text("insert into train_history_table (train_id, parameter_id, parameter_value) "
+                          "values (:train_id, :parameter_id, :parameter_value)"),
+                     {"train_id": train_id, "parameter_id": parameter_id, "parameter_value": parameter_value})
     conn.commit()
     conn.close()
 
 
 def ingest_data(train_id, data_id, file_name, user_id):
     try:
+        os.makedirs("./control/ingested", exist_ok=True)
+        os.makedirs("./control/failed", exist_ok=True)
         create_time = get_time_now()
         engine = db_engine()
         conn = engine.connect()
@@ -47,19 +50,23 @@ def ingest_data(train_id, data_id, file_name, user_id):
         ingestion = False
         try:
             conn.execute(
-                text(f"insert into train_history_table(train_id, data_ing_id, ing_start_time, status) values ({train_id}, {data_id}, '{create_time}', '{ing_start}')"))
+                text("insert into train_history_table(train_id, data_ing_id, ing_start_time, status) "
+                     "values (:train_id, :data_id, :create_time, :ing_start)"),
+                {"train_id": train_id, "data_id": data_id, "create_time": create_time, "ing_start": ing_start})
             conn.commit()
             conn.close()
 
             engine = db_engine()
             conn = engine.connect()
-            conn.execute(text(f"update train_history_table set status = '{ing_processing}' where train_id = {train_id}"))
+            conn.execute(text("update train_history_table set status = :ing_processing where train_id = :train_id"),
+                         {"ing_processing": ing_processing, "train_id": train_id})
             conn.commit()
             conn.close()
 
             engine = db_engine()
             conn = engine.connect()
-            conn.execute(text(f"insert into data_history_table values ({data_id}, '{ing_flag}', {user_id}, '{create_time}')"))
+            conn.execute(text("insert into data_history_table values (:data_id, :ing_flag, :user_id, :create_time)"),
+                         {"data_id": data_id, "ing_flag": ing_flag, "user_id": user_id, "create_time": create_time})
             conn.commit()
             conn.close()
 
@@ -71,7 +78,8 @@ def ingest_data(train_id, data_id, file_name, user_id):
             conn = engine.connect()
             end_time = get_time_now()
             conn.execute(
-                text(f"update train_history_table set ing_end_time = '{end_time}' , status = '{ing_end}' where train_id = {train_id}"))
+                text("update train_history_table set ing_end_time = :end_time , status = :ing_end where train_id = :train_id"),
+                {"end_time": end_time, "ing_end": ing_end, "train_id": train_id})
             conn.commit()
             conn.close()
 
@@ -86,13 +94,15 @@ def ingest_data(train_id, data_id, file_name, user_id):
             conn = engine.connect()
             end_time = get_time_now()
             conn.execute(
-                text(f"update train_history_table set ing_end_time = '{end_time}' , status = '{ing_failed}' where train_id = {train_id}"))
+                text("update train_history_table set ing_end_time = :end_time , status = :ing_failed where train_id = :train_id"),
+                {"end_time": end_time, "ing_failed": ing_failed, "train_id": train_id})
             conn.commit()
             conn.close()
 
             engine = db_engine()
             conn = engine.connect()
-            conn.execute(text(f"delete from data_history_table where data_id = {data_id}"))
+            conn.execute(text("delete from data_history_table where data_id = :data_id"), {"data_id": data_id})
+            conn.commit()
             conn.close()
 
             os.remove("./control/raw_data/" + file_name)

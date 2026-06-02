@@ -150,7 +150,7 @@ for k in score_data['key'].unique():
     sub_score_data['score'] = sub_score_data[list_of_performance_metrics].mean(axis=1)
     sub_score_data.drop(columns=list_of_performance_metrics, inplace=True)
     sub_score_data.drop(columns=['key'], inplace=True)
-    temp = temp.append(sub_score_data)
+    temp = pd.concat([temp, sub_score_data], ignore_index=True)
 
 score_data = temp.copy()
 
@@ -166,7 +166,7 @@ col1, col2, col3 = st.columns([1, 1, 1])
 
 with col1:
     st.markdown('#### Top 3 Stable Models')
-    stable_model = score_data.groupby(['split_window', 'model_name']).std().reset_index().copy()
+    stable_model = score_data.groupby(['split_window', 'model_name']).std(numeric_only=True).reset_index().copy()
     stable_model = stable_model.sort_values(by=['score'], ascending=True)
     st.table(stable_model.head(3).reset_index(drop=True)[['split_window', 'model_name']])
 
@@ -195,7 +195,7 @@ with col2:
 
 with col3:
     st.markdown('#### Top 3 Models Lowest Average Score')
-    average_models = score_data.groupby(['split_window', 'model_name']).mean().reset_index().copy()
+    average_models = score_data.groupby(['split_window', 'model_name']).mean(numeric_only=True).reset_index().copy()
     average_models = average_models.sort_values(by=['score'], ascending=True)
     st.table(average_models.head(3).reset_index(drop=True)[['split_window', 'model_name']])
 

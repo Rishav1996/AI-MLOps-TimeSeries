@@ -2,13 +2,12 @@ from data_processing.imputers import linear_imputer, mean_imputer, median_impute
 from data_processing.outliers import isolation_forest_detector, local_outlier_factor_detector, zscore_detector
 
 from data_processing.data_processing_helper import get_time_now, db_engine, get_default_parameters_in_dict, \
-    get_train_parameters_in_dict
+    get_train_parameters_in_dict, wait_for_tasks
 from data_processing.data_processing_config import data_processing_stages, database_utils, data_processing_parameters
 import pandas as pd
 import warnings
 from sqlalchemy import text
 from celery_app import celery_client
-from celery.result import AsyncResult
 
 
 warnings.filterwarnings("ignore")
@@ -17,7 +16,9 @@ warnings.filterwarnings("ignore")
 def get_ingest_id(train_id):
     engine = db_engine()
     conn = engine.connect()
-    data_id = conn.execute(text(f"select data_ing_id from train_history_table where train_id={train_id}")).fetchone()[0]
+    data_id = conn.execute(
+        text("select data_ing_id from train_history_table where train_id=:train_id"),
+        {"train_id": train_id}).fetchone()[0]
     conn.close()
     return int(data_id)
 
@@ -26,8 +27,8 @@ def get_user_id(train_id):
     engine = db_engine()
     conn = engine.connect()
     user_id = conn.execute(
-        text(f"select user_id from data_history_table where data_id in (select data_ing_id from train_history_table where train_id={train_id})")).fetchone()[
-        0]
+        text("select user_id from data_history_table where data_id in (select data_ing_id from train_history_table where train_id=:train_id)"),
+        {"train_id": train_id}).fetchone()[0]
     conn.close()
     return int(user_id)
 
@@ -36,7 +37,9 @@ def insert_data_id(data_id, user_id, data_proc_flag):
     engine = db_engine()
     conn = engine.connect()
     conn.execute(
-        text(f"insert into data_history_table (data_id, user_id, status, data_create_time) values ({data_id}, {user_id}, '{data_proc_flag}', '{get_time_now()}')"))
+        text("insert into data_history_table (data_id, user_id, status, data_create_time) "
+             "values (:data_id, :user_id, :data_proc_flag, :create_time)"),
+        {"data_id": data_id, "user_id": user_id, "data_proc_flag": data_proc_flag, "create_time": get_time_now()})
     conn.commit()
     conn.close()
 
@@ -52,7 +55,8 @@ def generate_dp_id():
 def set_dp_start_time(train_id):
     engine = db_engine()
     conn = engine.connect()
-    conn.execute(text(f"update train_history_table set dp_start_time='{get_time_now()}' where train_id={train_id}"))
+    conn.execute(text("update train_history_table set dp_start_time=:now where train_id=:train_id"),
+                 {"now": get_time_now(), "train_id": train_id})
     conn.commit()
     conn.close()
 
@@ -60,7 +64,8 @@ def set_dp_start_time(train_id):
 def set_dp_end_time(train_id):
     engine = db_engine()
     conn = engine.connect()
-    conn.execute(text(f"update train_history_table set dp_end_time='{get_time_now()}' where train_id={train_id}"))
+    conn.execute(text("update train_history_table set dp_end_time=:now where train_id=:train_id"),
+                 {"now": get_time_now(), "train_id": train_id})
     conn.commit()
     conn.close()
 
@@ -68,7 +73,8 @@ def set_dp_end_time(train_id):
 def get_data(data_id):
     engine = db_engine()
     conn = engine.connect()
-    data = conn.execute(text(f"select period, ts_id, value from data_table where data_id={data_id}")).fetchall()
+    data = conn.execute(text("select period, ts_id, value from data_table where data_id=:data_id"),
+                        {"data_id": data_id}).fetchall()
     data = pd.DataFrame(data)
     data.columns = ['period', 'ts_id', 'value']
     conn.close()
@@ -78,7 +84,8 @@ def get_data(data_id):
 def set_dp_flag(train_id, flag):
     engine = db_engine()
     conn = engine.connect()
-    conn.execute(text(f"update train_history_table set status='{flag}' where train_id={train_id}"))
+    conn.execute(text("update train_history_table set status=:flag where train_id=:train_id"),
+                 {"flag": flag, "train_id": train_id})
     conn.commit()
     conn.close()
 
@@ -86,7 +93,8 @@ def set_dp_flag(train_id, flag):
 def set_dp_id(train_id, data_id):
     engine = db_engine()
     conn = engine.connect()
-    conn.execute(text(f"update train_history_table set data_dp_id={data_id} where train_id={train_id}"))
+    conn.execute(text("update train_history_table set data_dp_id=:data_id where train_id=:train_id"),
+                 {"data_id": data_id, "train_id": train_id})
     conn.commit()
     conn.close()
 
@@ -155,22 +163,12 @@ def main(train_id):
         dataset_map = [dataset[dataset['ts_id'] == i].copy() for i in dataset['ts_id'].unique()]
         dataset_ids = [outlier_wrapper.apply_async((i.to_dict(), outlier_choice,
                                                     outlier_cnt, zscore_cutoff), queue='data-processing-pipeline').id for i in dataset_map]
-        while sum([1 for i in dataset_ids if AsyncResult(i, app=celery_client).state != 'SUCCESS' and AsyncResult(i,
-                                                                                                                  app=celery_client).state != 'FAILURE']) > 0:
-            pass
-        if sum([1 for i in dataset_ids if AsyncResult(i, app=celery_client).state == 'SUCCESS']) < len(dataset_ids):
-            raise Exception('Some tasks failed')
-        dataset_results = [pd.DataFrame(AsyncResult(i, app=celery_client).get()) for i in dataset_ids]
+        dataset_results = [pd.DataFrame(result) for result in wait_for_tasks(dataset_ids)]
         dataset = pd.concat(dataset_results, axis=0)
 
         dataset_map = [dataset[dataset['ts_id'] == i].copy() for i in dataset['ts_id'].unique()]
         dataset_ids = [impute_wrapper.apply_async((i.to_dict(), impute_choice, impute_if_zero), queue='data-processing-pipeline').id for i in dataset_map]
-        while sum([1 for i in dataset_ids if AsyncResult(i, app=celery_client).state != 'SUCCESS' and AsyncResult(i,
-                                                                                                                  app=celery_client).state != 'FAILURE']) > 0:
-            pass
-        if sum([1 for i in dataset_ids if AsyncResult(i, app=celery_client).state == 'SUCCESS']) < len(dataset_ids):
-            raise Exception('Some tasks failed')
-        dataset_results = [pd.DataFrame(AsyncResult(i, app=celery_client).get()) for i in dataset_ids]
+        dataset_results = [pd.DataFrame(result) for result in wait_for_tasks(dataset_ids)]
         dataset = pd.concat(dataset_results, axis=0)
 
         dataset['data_id'] = new_data_id

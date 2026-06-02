@@ -1,3 +1,4 @@
+import time
 from sqlalchemy import create_engine
 from datetime import datetime
 from data_processing.data_processing_config import database_utils
@@ -7,6 +8,24 @@ import pandas as pd
 
 def get_time_now():
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
+def wait_for_tasks(task_ids, poll_interval=0.5):
+    """Block until every Celery task id reaches a terminal state.
+
+    Replaces busy-wait ``while ...: pass`` loops (which peg a CPU core). Raises if
+    any task ends in FAILURE; otherwise returns the results in the given id order.
+    """
+    from celery.result import AsyncResult
+    from celery_app import celery_client
+
+    results = [AsyncResult(task_id, app=celery_client) for task_id in task_ids]
+    while any(r.state not in ('SUCCESS', 'FAILURE') for r in results):
+        time.sleep(poll_interval)
+    failed = [r.id for r in results if r.state == 'FAILURE']
+    if failed:
+        raise Exception(f"Celery tasks failed: {failed}")
+    return [r.get() for r in results]
 
 
 def db_engine():
@@ -41,7 +60,9 @@ def get_default_parameters_in_dataframe():
 def get_train_parameters_in_dict(train_id):
     engine = db_engine()
     conn = engine.connect()
-    parameters = conn.execute(text(f"select parameter_id, train_value from train_parameter_table where train_id = {train_id}")).fetchall()
+    parameters = conn.execute(
+        text("select parameter_id, train_value from train_parameter_table where train_id = :train_id"),
+        {"train_id": train_id}).fetchall()
     parameters = pd.DataFrame(parameters)
     parameters.columns = ['parameter_id', 'parameter_value']
     parameters = {parameter['parameter_id']: parameter['parameter_value'] for parameter in

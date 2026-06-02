@@ -47,7 +47,7 @@ forecasting_parameters = {
     'model_choice': 25,
     'model_types': 26,
     'auto_ensemble': 27,
-    'stacking': 28,
+    'ensemble': 28,
     'data_split': 29
 }
 

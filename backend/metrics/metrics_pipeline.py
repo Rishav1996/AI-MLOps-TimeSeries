@@ -9,13 +9,16 @@ def get_data(train_id):
     engine = db_engine()
     conn = engine.connect()
     ing_id, fcst_id = conn.execute(
-        text(f"select data_ing_id, data_fcst_id from train_history_table where train_id={train_id}")).fetchone()
+        text("select data_ing_id, data_fcst_id from train_history_table where train_id=:train_id"),
+        {"train_id": train_id}).fetchone()
 
-    ing_data = conn.execute(text(f"select ts_id, period, value from data_table where data_id={ing_id}")).fetchall()
+    ing_data = conn.execute(text("select ts_id, period, value from data_table where data_id=:data_id"),
+                            {"data_id": ing_id}).fetchall()
     ing_data = pd.DataFrame(ing_data, columns=['ts_id', 'period', 'historical'])
 
     fcst_data = conn.execute(
-        text(f"select ts_id, period, value, split_window, split_no, model_id from data_table where data_id={fcst_id}")).fetchall()
+        text("select ts_id, period, value, split_window, split_no, model_id from data_table where data_id=:data_id"),
+        {"data_id": fcst_id}).fetchall()
     fcst_data = pd.DataFrame(fcst_data, columns=['ts_id', 'period', 'forecast', 'split_window', 'split_no', 'model_id'])
 
     data = pd.merge(ing_data, fcst_data, on=['ts_id', 'period'], how='outer')
@@ -37,7 +40,11 @@ def generate_metrics(data):
     if 'period' not in data.columns or 'historical' not in data.columns or 'forecast' not in data.columns:
         return
 
-    data.sort_values('period', inplace=True)
+    data = data.sort_values('period')
+    # metrics need aligned actual/forecast pairs; drop periods present on only one side
+    data = data.dropna(subset=['historical', 'forecast'])
+    if data.empty:
+        return
 
     y_pred = data.forecast.values
     y_true = data.historical.values

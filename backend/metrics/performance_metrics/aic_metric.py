@@ -3,4 +3,6 @@ from math import log
 
 
 def metric_loss(y_true, y_pred):
-    return len(y_pred) * log(mse(y_true, y_pred)) + 2 * 1
+    # guard against log(0) when the forecast matches the actuals exactly
+    error = max(float(mse(y_true, y_pred)), 1e-10)
+    return len(y_pred) * log(error) + 2 * 1
