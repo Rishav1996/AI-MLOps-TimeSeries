@@ -26,6 +26,10 @@ else:
 
 result = get_list_of_train_data_id(user_id)
 
+if not result['train_id']:
+    st.warning('No completed forecasting runs found for this user.')
+    st.stop()
+
 col1, col2, _ = st.columns([1, 1, 3])
 with col1:
     train_id = st.selectbox("Select Train Data", result['train_id'], index=len(result['train_id'])-1)
@@ -35,7 +39,7 @@ data_dp_id = result['data_dp_id'][result['train_id'].index(train_id)]
 
 data = get_data(data_ing_id, data_dp_id)
 with col2:
-    ts_id = st.selectbox("Select Time Series", data['ts_id'].unique())
+    ts_id = st.selectbox("Select Time Series", sorted(data['ts_id'].unique()))
 
 st.markdown('#### Actual and Corrected history')
 
@@ -103,7 +107,7 @@ with col1:
                                           'metric_name'].unique())
 data_drift_metrics_data = metric_data[metric_data['metric_name'].isin(['psi', 'ks'])]
 data_drift_metrics_data = data_drift_metrics_data[(data_drift_metrics_data['ts_id'] == ts_id)
-                                                  & (data_drift_metrics_data['metric_name'] == data_drift_metrics)]
+                                                  & (data_drift_metrics_data['metric_name'] == data_drift_metrics)].copy()
 if data_drift_metrics == 'ks':
     data_drift_metrics_data['metric_value'] = data_drift_metrics_data['metric_value'].map(ks_metric)
 else:

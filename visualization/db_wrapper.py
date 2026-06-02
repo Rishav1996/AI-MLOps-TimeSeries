@@ -1,4 +1,10 @@
-"""Read-only DB access for the Streamlit dashboard (history, forecasts, metrics)."""
+"""Read-only DB access for the Streamlit dashboard (history, forecasts, metrics).
+
+The query functions fetch rows from MySQL; the pure transform helpers
+(``merge_history``, ``merge_forecast``, ``normalize_metric``) shape, parse and
+sort the frames. The transforms take no DB connection so they can be imported
+and unit-tested in isolation.
+"""
 from config import database_utils
 from sqlalchemy import create_engine, text
 import pandas as pd
@@ -10,6 +16,49 @@ def db_engine():
                f'{database_utils["HOST"]}:{database_utils["PORT"]}/{database_utils["DATABASE"]}'
     engine = create_engine(conn_url, echo=False)
     return engine
+
+
+# --- pure transforms (no DB; unit-testable) --------------------------------
+
+def merge_history(result_ing, result_dp):
+    """Merge raw and processed history on (period, ts_id).
+
+    Periods are stored as canonical ``YYYY-MM-DD`` strings; they are parsed to
+    datetime and the frame is sorted chronologically within each series so line
+    charts connect points in time order rather than DB-return order.
+    """
+    result = pd.merge(result_ing, result_dp, on=['period', 'ts_id'], how='outer')
+    result['period'] = pd.to_datetime(result['period'])
+    return result.sort_values(by=['ts_id', 'period']).reset_index(drop=True)
+
+
+def merge_forecast(actual_data, forecast_data):
+    """Merge actuals with forecast rows on (period, ts_id).
+
+    Parses periods to datetime and sorts each (series, model, split) group
+    chronologically. ``split_no`` is stored as a string, so it is sorted on a
+    numeric key (fold 10 follows fold 9, not fold 1).
+    """
+    result = pd.merge(actual_data, forecast_data, on=['period', 'ts_id'], how='inner')
+    result['period'] = pd.to_datetime(result['period'])
+    sort_cols = ['ts_id']
+    for col in ('model_name', 'split_window'):
+        if col in result.columns:
+            sort_cols.append(col)
+    if 'split_no' in result.columns:
+        result = result.assign(_split_no=pd.to_numeric(result['split_no'], errors='coerce'))
+        sort_cols.append('_split_no')
+    sort_cols.append('period')
+    result = result.sort_values(by=sort_cols).reset_index(drop=True)
+    return result.drop(columns='_split_no', errors='ignore')
+
+
+def normalize_metric(result):
+    """Coerce ``split_no`` to str and ``metric_value`` to float for the metric frame."""
+    result = result.copy()
+    result['split_no'] = result['split_no'].astype(str)
+    result['metric_value'] = result['metric_value'].astype(float)
+    return result
 
 
 def get_list_of_train_data_id(user_id):
@@ -32,7 +81,7 @@ def get_list_of_train_data_id(user_id):
 
 
 def get_data(data_ing_id, data_dp_id):
-    """Return raw vs. processed history per period/ts_id for a run (merged)."""
+    """Return raw vs. processed history per period/ts_id for a run (merged, time-sorted)."""
     engine = db_engine()
     conn = engine.connect()
     query = text("select period, ts_id, value from data_table where data_id = :data_id")
@@ -41,9 +90,7 @@ def get_data(data_ing_id, data_dp_id):
     result_dp = conn.execute(query, {"data_id": data_dp_id}).fetchall()
     result_dp = pd.DataFrame(result_dp, columns=['period', 'ts_id', 'processed_history'])
     conn.close()
-    result = pd.merge(result_ing, result_dp, on=['period', 'ts_id'], how='outer')
-    result['period'] = pd.to_datetime(result['period'])
-    return result
+    return merge_history(result_ing, result_dp)
 
 
 def get_forecast_data(train_id):
@@ -66,10 +113,8 @@ def get_forecast_data(train_id):
         {"data_id": data_fcst_id}).fetchall()
     forecast_data = pd.DataFrame(forecast_data, columns=['period', 'ts_id', 'forecast', 'split_window', 'split_no', 'model_name'])
     forecast_data['split_no'] = forecast_data['split_no'].astype(str)
-    result = pd.merge(actual_data, forecast_data, on=['period', 'ts_id'], how='inner')
-    result['period'] = pd.to_datetime(result['period'])
     conn.close()
-    return result
+    return merge_forecast(actual_data, forecast_data)
 
 
 def get_metric_data(train_id):
@@ -83,7 +128,5 @@ def get_metric_data(train_id):
         "inner join metric_table me on(me.metric_id = tm.metric_id) where train_id = :train_id")
     result = conn.execute(query, {"train_id": train_id}).fetchall()
     result = pd.DataFrame(result, columns=['ts_id', 'model_name', 'split_window', 'split_no', 'metric_name', 'metric_value'])
-    result['split_no'] = result['split_no'].astype(str)
-    result['metric_value'] = result['metric_value'].astype(float)
     conn.close()
-    return result
+    return normalize_metric(result)
