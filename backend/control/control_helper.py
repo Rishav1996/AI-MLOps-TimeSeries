@@ -4,6 +4,7 @@ Shared by the API endpoints (in app.py) and the ingestion orchestration in
 control_modal.py. All SQL uses bound parameters; writes commit before closing.
 """
 import json
+import re
 from sqlalchemy import create_engine, text
 from datetime import datetime
 from control.control_config import database_utils, data_processing_parameters, ingestion_stages, data_processing_stages, \
@@ -28,6 +29,24 @@ def db_engine():
 def password_hashing(text: str):
     """Return the MD5 hex digest of a password for storage/comparison."""
     return str(hashlib.md5(text.encode()).hexdigest())
+
+
+_ISO_DATE_RE = re.compile(r'^\s*\d{4}[-/]\d{1,2}[-/]\d{1,2}')
+
+
+def normalize_period(period_series):
+    """Normalize a period column to canonical 'YYYY-MM-DD' strings.
+
+    Detects format per value: year-first (YYYY-MM-DD) is parsed as ISO, otherwise it
+    is treated as day-first (DD-MM-YYYY). This accepts the documented canonical format
+    and the day-first form without one corrupting the other, and keeps the stored
+    value consistent with the forecast output (and the 10-char column).
+    """
+    def _parse(value):
+        value = str(value).strip()
+        return pd.to_datetime(value, dayfirst=not bool(_ISO_DATE_RE.match(value)))
+
+    return pd.to_datetime(period_series.map(_parse)).dt.strftime('%Y-%m-%d')
 
 
 def get_default_parameters_in_dict():

@@ -10,7 +10,7 @@ import pandas as pd
 from sqlalchemy import text
 
 from control.control_config import ingestion_stages, database_utils
-from control.control_helper import get_time_now, db_engine, get_default_parameters_in_dict
+from control.control_helper import get_time_now, db_engine, get_default_parameters_in_dict, normalize_period
 from data_processing import data_processing_pipeline as dpp
 from forecasting import forecasting_pipeline as fp
 
@@ -51,10 +51,8 @@ def ingest_data(train_id, data_id, file_name, user_id):
         conn = engine.connect()
         dataset = pd.read_csv("./control/raw_data/" + file_name)
         dataset = pd.DataFrame(data=dataset.values, columns=dataset.columns)
-        # Normalize the period to canonical YYYY-MM-DD. dayfirst=True accepts
-        # DD-MM-YYYY inputs and still parses ISO (YYYY-MM-DD) correctly, keeping the
-        # stored format consistent with the forecast output (and the 10-char column).
-        dataset['period'] = pd.to_datetime(dataset['period'], dayfirst=True).dt.strftime('%Y-%m-%d')
+        # Normalize the period to canonical YYYY-MM-DD (accepts DD-MM-YYYY and ISO).
+        dataset['period'] = normalize_period(dataset['period'])
         parameters = get_default_parameters_in_dict()
         ing_flag = parameters[ingestion_stages["ing_flag"]]
         ing_start = parameters[ingestion_stages["ing_start"]]

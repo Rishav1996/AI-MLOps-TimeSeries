@@ -6,6 +6,7 @@ overall model ranking. Reads MySQL directly via db_wrapper.
 """
 import plotly.express as px
 from db_wrapper import get_list_of_train_data_id, get_data, get_metric_data, get_forecast_data
+from scoring import ks_metric, psi_metric, check_improvement
 import streamlit as st
 import pandas as pd
 
@@ -94,24 +95,6 @@ fig = px.histogram(performance_metrics_data,
 st.plotly_chart(fig, use_container_width=True)
 
 
-def ks_metric(val):
-    """Map a KS p-value to a drift label ('Yes' if < 0.05 else 'No')."""
-    if val < 0.05:
-        return 'Yes'
-    else:
-        return 'No'
-
-
-def psi_metric(val):
-    """Map a PSI value to a drift label ('No' < 0.1, 'Slight' < 0.2, else 'Extreme')."""
-    if val < 0.1:
-        return 'No'
-    elif val < 0.2:
-        return 'Slight'
-    else:
-        return 'Extreme'
-
-
 st.markdown('#### Data Drift Metrics')
 col1, _ = st.columns([1, 4])
 with col1:
@@ -183,20 +166,6 @@ with col1:
 
 with col2:
     st.markdown('#### Top 3 Continuous Improving Models')
-
-
-    def check_improvement(x):
-        values = x.values
-        if len(values) > 1:
-            calc = [1 if values[k] >= values[k + 1] else -1 for k in range(len(values) - 1)]
-            calc = sum(calc)
-            if calc > 0:
-                return calc
-            else:
-                return 0
-        else:
-            return values
-
 
     score_data.sort_values(by=['split_window', 'model_name', 'split_no'], ascending=True, inplace=True)
     performing_model = score_data.groupby(['split_window', 'model_name']).agg({'score': check_improvement}).reset_index().copy()
