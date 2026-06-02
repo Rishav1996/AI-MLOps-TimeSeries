@@ -145,7 +145,9 @@ score_data = metric_data[(metric_data['ts_id'] == ts_id) & (~metric_data['metric
 score_data = pd.pivot_table(score_data, index=['split_no', 'split_window', 'model_name'],
                             columns='metric_name', values='metric_value')
 score_data.reset_index(inplace=True)
-score_data['key'] = score_data['split_no'].map(str) + '_' + score_data['split_window']
+# astype(str) (not map(str)) so the key stays string-typed even when score_data is
+# empty -- map(str) preserves int64 on an empty series and breaks the concatenation.
+score_data['key'] = score_data['split_no'].astype(str) + '_' + score_data['split_window'].astype(str)
 temp = pd.DataFrame()
 
 list_of_performance_metrics = metric_data[~metric_data['metric_name'].isin(['psi', 'ks'])]['metric_name'].unique()
