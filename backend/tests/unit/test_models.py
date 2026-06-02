@@ -72,6 +72,23 @@ def test_ensemble_model_forecast(monthly_series, fh, module):
     assert not np.isnan(values).any()
 
 
+@pytest.mark.parametrize("module", [ensemble_model, auto_ensemble_model],
+                         ids=lambda m: m.__name__.split(".")[-1])
+def test_ensemble_model_short_window(monthly_index, module):
+    """Ensemble of seasonal sub-models on a short window (sp capped to 1) must not raise.
+
+    Mirrors the pipeline's capped_seasonal_period behavior on a small CV train window;
+    sp=12 here would trip Theta's 'x must have 2 complete cycles'.
+    """
+    short = pd.DataFrame({"value": 10.0 + np.arange(9)}, index=monthly_index[:9])
+    fh = ForecastingHorizon([1, 2])
+    forecasters = [("naive", NaiveForecaster(sp=1)), ("theta", ThetaForecaster(sp=1))]
+    forecast = module.model(short, fh, forecasters)
+    values = np.asarray(forecast, dtype=float).flatten()
+    assert len(values) == 2
+    assert not np.isnan(values).any()
+
+
 @pytest.mark.parametrize("model_name", ["naive", "theta", "poly_trend"])
 def test_models_forecasts_dispatch(monthly_series, model_name):
     """forecasting_pipeline.models_forecasts dispatches by name and reindexes output."""

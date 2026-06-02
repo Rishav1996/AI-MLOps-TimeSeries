@@ -38,6 +38,19 @@ def seasonal_period(index, default=1):
     return default
 
 
+def capped_seasonal_period(index, min_observations, default=1):
+    """``seasonal_period`` reduced to 1 when the smallest window can't support it.
+
+    Seasonal decomposition needs >= 2*sp observations. Ensemble sub-models (Theta /
+    seasonal Naive) are fit on every CV train window, so the seasonal period must fit
+    the *smallest* window; otherwise statsmodels raises "x must have 2 complete cycles".
+    """
+    sp = seasonal_period(index, default=default)
+    if min_observations < 2 * sp:
+        return 1
+    return sp
+
+
 def freq_string(index):
     """Pandas offset alias for a DatetimeIndex cadence (for Prophet / date_range)."""
     if len(index) < 2:

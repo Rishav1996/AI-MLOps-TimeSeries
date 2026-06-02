@@ -11,6 +11,7 @@ import pytest
 from forecasting.forecasting_helper import (
     _delta_days,
     seasonal_period,
+    capped_seasonal_period,
     freq_string,
     wait_for_tasks,
 )
@@ -38,6 +39,18 @@ def test_seasonal_period_subdaily_and_short_use_default():
     hourly = pd.date_range("2020-01-01", periods=10, freq="h")
     assert seasonal_period(hourly, default=2) == 2
     assert seasonal_period(pd.DatetimeIndex(["2020-01-01"]), default=3) == 3
+
+
+def test_capped_seasonal_period():
+    monthly = pd.date_range("2020-01-01", periods=40, freq="MS")
+    # enough observations -> full seasonal period
+    assert capped_seasonal_period(monthly, min_observations=24) == 12
+    # smallest window too short for 2 cycles -> drop to 1
+    assert capped_seasonal_period(monthly, min_observations=23) == 1
+    assert capped_seasonal_period(monthly, min_observations=9) == 1
+    daily = pd.date_range("2020-01-01", periods=800, freq="D")
+    assert capped_seasonal_period(daily, min_observations=800) == 365
+    assert capped_seasonal_period(daily, min_observations=100) == 1
 
 
 # --- freq_string ------------------------------------------------------------

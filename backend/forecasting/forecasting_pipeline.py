@@ -10,7 +10,7 @@ from datetime import datetime
 from forecasting.ensemble_models import ensemble_model, auto_ensemble_model
 from forecasting.stability_metrics import psi_metric, ks_metric
 from forecasting.forecasting_helper import get_time_now, db_engine, get_default_parameters_in_dict, \
-    get_train_parameters_in_dict, seasonal_period, wait_for_tasks
+    get_train_parameters_in_dict, seasonal_period, capped_seasonal_period, wait_for_tasks
 from forecasting.forecasting_config import forecasting_stages, database_utils, forecasting_parameters
 from forecasting.timeseries_splitter import expanding_window_splitter, sliding_window_splitter
 from forecasting.models import auto_arima_model, ets_model, polynomial_trend_model, theta_model, prophet_model, naive_model
@@ -289,9 +289,12 @@ def ensemble_forecasts(data, test_size, forecast_horizon, data_split, model_ids,
             train_test_split.append([i, list(range(i[-1] + 1, j[0] + 1))])
         splits['sliding'] = train_test_split
 
-    sp = seasonal_period(data.index, default=1)
-    if data.shape[0] < (2 * sp):
-        sp = 2
+    # sp must fit the smallest CV train window: the ensemble's seasonal sub-models
+    # (theta / naive) are re-fit on every window, so cap sp to avoid the seasonal
+    # decomposition requiring more observations than a short window provides.
+    train_window_sizes = [len(train_idx) for split in splits.values() for train_idx, _ in split]
+    min_train = min(train_window_sizes) if train_window_sizes else data.shape[0]
+    sp = capped_seasonal_period(data.index, min_train, default=1)
 
     model_list = []
 

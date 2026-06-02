@@ -122,10 +122,11 @@ def test_sample_dataset_pipeline():
             "parameters": dp_params, "train_type": "create"}))["status"] == "SUCCESS"
         assert _poll_phase(client, user_id, train_id, "DP") == "E"
 
-        # exercise every single model (incl. ETS Box-Cox path) on the real sample
+        # exercise every single model (ETS Box-Cox path) AND both ensembles (the
+        # short-window Theta/seasonal path) on the real sample, over both split types
         fcst_params = json.dumps({
-            "test_size": "0.5", "forecast_horizon": "0.2", "model_choice": "single",
-            "model_types": "1,2,3,4,5,6", "auto_ensemble": "0", "ensemble": "0", "data_split": "expanding"})
+            "test_size": "0.5", "forecast_horizon": "0.2", "model_choice": "multi",
+            "model_types": "1,2,3,4,5,6", "auto_ensemble": "1", "ensemble": "1", "data_split": "both"})
         assert _body(client.post(f"{BASE_URL}/trigger-forecasting", data={
             "user_id": user_id, "train_id": train_id,
             "parameters": fcst_params, "train_type": "create"}))["status"] == "SUCCESS"
