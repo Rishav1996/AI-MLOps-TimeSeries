@@ -1,9 +1,11 @@
+"""Z-score outlier detection for a single series, computed per calendar year."""
 import pandas as pd
 import numpy as np
 import scipy.stats as stats
 
 
 def detector(data, z_score=3):
+    """Flag values whose per-year z-score exceeds the threshold as NaN."""
     data = data.copy()
     data['year'] = data.index.year
     data['zscore'] = np.nan

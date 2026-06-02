@@ -1,14 +1,40 @@
-[tool.poetry]
-name = "python-image"
+[project]
+name = "ai-mlops-timeseries-backend"
 version = "0.1.0"
-description = ""
-authors = ["Rishav Saigal <rishavsaigal@gmail.com>"]
-readme = "README.md"
+description = "FastAPI + Celery backend for the MLOps time-series forecasting platform"
+authors = [{ name = "Rishav Saigal", email = "rishavsaigal@gmail.com" }]
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "python-multipart",
+    "gunicorn",
+    "celery[redis]",
+    "flower",
+    "redis",
+    "sqlalchemy>=2",
+    "pymysql",
+    "pandas>=2.1,<3",
+    "numpy>=1.26,<2",
+    "scipy",
+    "scikit-learn",
+    "statsmodels",
+    "sktime",
+    "pmdarima",
+    "prophet",
+    "requests",
+]
 
-[tool.poetry.dependencies]
-python = ">=3.8,<3.13"
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "httpx",
+]
 
+[tool.uv]
+package = false
 
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+[tool.pytest.ini_options]
+markers = [
+    "integration: end-to-end tests that require the full stack running (gated by RUN_INTEGRATION=1)",
+]

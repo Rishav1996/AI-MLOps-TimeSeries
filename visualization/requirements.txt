@@ -1,4 +1,0 @@
-sqlalchemy
-pymysql
-plotly
-streamlit

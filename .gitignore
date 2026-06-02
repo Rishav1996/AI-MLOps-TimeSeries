@@ -8,3 +8,12 @@ visualization/.idea
 visualization/__pycache__
 frontend/package-lock.json
 frontend/yarn.lock
+
+# Python / uv
+.venv/
+**/.venv/
+*.egg-info/
+.pytest_cache/
+backend/control/raw_data/
+backend/control/ingested/
+backend/control/failed/

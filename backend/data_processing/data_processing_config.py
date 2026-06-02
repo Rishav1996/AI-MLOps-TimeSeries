@@ -1,3 +1,7 @@
+"""Data-processing config: DB connection settings and parameter_table ID maps.
+
+Mirrors the IDs in ``parameter_table``; kept in sync with the other packages' configs.
+"""
 from global_config import MYSQL_IP, MYSQL_PORT
 
 database_utils = {
@@ -47,7 +51,7 @@ forecasting_parameters = {
     'model_choice': 25,
     'model_types': 26,
     'auto_ensemble': 27,
-    'stacking': 28,
+    'ensemble': 28,
     'data_split': 29
 }
 

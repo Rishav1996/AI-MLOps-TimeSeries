@@ -1,21 +1,15 @@
-from adtk.detector import OutlierDetector
-from adtk.data import validate_series
+"""Isolation Forest outlier detection for a single series (scikit-learn)."""
 from sklearn.ensemble import IsolationForest
 import pandas as pd
 import numpy as np
 
 
 def detector(data, contamination='auto'):
+    """Flag Isolation-Forest outliers in 'value' as NaN; contamination 'auto' or float."""
     data = data.copy()
-    data.reset_index(drop=True, inplace=True)
-    data.index = data['period'].map(pd.to_datetime)
-    if contamination == 'auto':
-        outlier_detector = OutlierDetector(IsolationForest(contamination=contamination))
-    else:
+    if contamination != 'auto':
         contamination = float(contamination)
-        outlier_detector = OutlierDetector(IsolationForest(contamination=contamination))
-    value_data = validate_series(data[['value']])
-    anomalies = outlier_detector.fit_detect(value_data)
-    data.loc[anomalies, 'value'] = np.nan
-    data = pd.DataFrame(data)
-    return data
+    model = IsolationForest(contamination=contamination, random_state=42)
+    predictions = model.fit_predict(data[['value']].to_numpy())
+    data.loc[predictions == -1, 'value'] = np.nan
+    return pd.DataFrame(data)

@@ -1,21 +1,31 @@
+"""Metrics stage: compute per-series/model/split performance metrics for a run.
+
+``calculate_metric`` joins a run's actuals with its forecast rows, computes each
+performance metric per (ts_id, model, split), and writes them to train_metric_table.
+"""
 from metrics.metrics_config import database_utils
 from metrics.metrics_helper import db_engine
 from metrics.performance_metrics import rmse_metric, rmspe_metric, mape_metric, aic_metric, bic_metric, bias_metric
 from sqlalchemy import text
+import numpy as np
 import pandas as pd
 
 
 def get_data(train_id):
+    """Join a run's ingested actuals with its forecast rows (outer) for metrics."""
     engine = db_engine()
     conn = engine.connect()
     ing_id, fcst_id = conn.execute(
-        text(f"select data_ing_id, data_fcst_id from train_history_table where train_id={train_id}")).fetchone()
+        text("select data_ing_id, data_fcst_id from train_history_table where train_id=:train_id"),
+        {"train_id": train_id}).fetchone()
 
-    ing_data = conn.execute(text(f"select ts_id, period, value from data_table where data_id={ing_id}")).fetchall()
+    ing_data = conn.execute(text("select ts_id, period, value from data_table where data_id=:data_id"),
+                            {"data_id": ing_id}).fetchall()
     ing_data = pd.DataFrame(ing_data, columns=['ts_id', 'period', 'historical'])
 
     fcst_data = conn.execute(
-        text(f"select ts_id, period, value, split_window, split_no, model_id from data_table where data_id={fcst_id}")).fetchall()
+        text("select ts_id, period, value, split_window, split_no, model_id from data_table where data_id=:data_id"),
+        {"data_id": fcst_id}).fetchall()
     fcst_data = pd.DataFrame(fcst_data, columns=['ts_id', 'period', 'forecast', 'split_window', 'split_no', 'model_id'])
 
     data = pd.merge(ing_data, fcst_data, on=['ts_id', 'period'], how='outer')
@@ -25,6 +35,7 @@ def get_data(train_id):
 
 
 def get_metrics_list():
+    """Return the metric registry as a {metric_name: metric_id} dict."""
     engine = db_engine()
     conn = engine.connect()
     metrics_list = conn.execute(text("select metric_id, metric_name from metric_table")).fetchall()
@@ -34,10 +45,19 @@ def get_metrics_list():
 
 
 def generate_metrics(data):
+    """Compute all performance metrics for one (ts_id, model, split) group.
+
+    Aligns actual/forecast pairs (dropping unmatched periods) and returns a DataFrame
+    of metric_name/metric_value rows; returns None if there is nothing to score.
+    """
     if 'period' not in data.columns or 'historical' not in data.columns or 'forecast' not in data.columns:
         return
 
-    data.sort_values('period', inplace=True)
+    data = data.sort_values('period')
+    # metrics need aligned actual/forecast pairs; drop periods present on only one side
+    data = data.dropna(subset=['historical', 'forecast'])
+    if data.empty:
+        return
 
     y_pred = data.forecast.values
     y_true = data.historical.values
@@ -73,23 +93,36 @@ def generate_metrics(data):
 
 
 def calculate_metric(train_id):
+    """Compute and persist performance metrics for every series/model/split of a run.
+
+    Rows whose metric could not be computed to a finite number are dropped before
+    the insert: train_metric_table.metric_value is NOT NULL, so a single NaN/inf
+    would abort the whole write with an IntegrityError.
+    """
     data = get_data(train_id)
 
     test_data = data[~data['forecast'].isna()].copy()
+    if test_data.empty:
+        return
     test_data['key'] = test_data['ts_id'].map(str) + '_' + test_data['model_id'].map(str) + '_' + test_data[
         'split_window'].map(str) + '_' + test_data['split_no'].map(str)
     metric_result = test_data.groupby('key')[['period', 'historical', 'forecast']].apply(generate_metrics).reset_index(
         level=0)
+    if metric_result.empty or 'metric_value' not in metric_result.columns:
+        return
     metric_result['train_id'] = train_id
     metric_result['ts_id'] = metric_result['key'].str.split('_').str[0]
     metric_result['model_id'] = metric_result['key'].str.split('_').str[1]
     metric_result['split_window'] = metric_result['key'].str.split('_').str[2]
     metric_result['split_no'] = metric_result['key'].str.split('_').str[3]
 
-    actual_data = data.drop_duplicates(subset=['ts_id', 'period'], keep='first').copy()
-    actual_data.sort_values(by=['ts_id', 'period'], inplace=True)
-
     metric_result.drop(columns=['key'], inplace=True)
+
+    # train_metric_table.metric_value is NOT NULL; never insert a NaN/inf value
+    metric_result['metric_value'] = pd.to_numeric(metric_result['metric_value'], errors='coerce')
+    metric_result = metric_result[np.isfinite(metric_result['metric_value'])]
+    if metric_result.empty:
+        return
 
     engine = db_engine()
     metric_result.to_sql('train_metric_table', engine, schema=database_utils["DATABASE"],

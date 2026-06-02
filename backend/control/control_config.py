@@ -1,3 +1,8 @@
+"""Control-layer config: DB connection settings and the parameter_table ID maps.
+
+The integer IDs mirror rows in ``parameter_table`` (stage flags and tunable
+parameters); keep them in sync with the other packages' ``*_config.py`` copies.
+"""
 from global_config import MYSQL_IP, MYSQL_PORT
 
 database_utils = {
@@ -47,7 +52,7 @@ forecasting_parameters = {
     'model_choice': 25,
     'model_types': 26,
     'auto_ensemble': 27,
-    'stacking': 28,
+    'ensemble': 28,
     'data_split': 29
 }
 

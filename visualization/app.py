@@ -1,5 +1,12 @@
+"""Streamlit dashboard: explore a run's processed history, forecasts, and metrics.
+
+Selected by ``user_id`` (query param or session), then by train_id and ts_id. Renders
+actual-vs-processed history, forecast overlays, performance/drift metrics, and an
+overall model ranking. Reads MySQL directly via db_wrapper.
+"""
 import plotly.express as px
 from db_wrapper import get_list_of_train_data_id, get_data, get_metric_data, get_forecast_data
+from scoring import ks_metric, psi_metric, check_improvement
 import streamlit as st
 import pandas as pd
 
@@ -7,16 +14,21 @@ st.set_page_config(page_title="Visualization", layout="wide",
                    initial_sidebar_state="expanded", page_icon="image/line-chart.png")
 st.header("Visualization of Time Series Data")
 
-if 'user_id' in st.query_params.to_dict().keys():
-    user_id = st.query_params.to_dict()['user_id'][0]
-    st.session_state.user_id = user_id[0]
-elif 'user_id' in st.session_state.keys():
-    user_id = st.session_state.user_id[0]
+if 'user_id' in st.query_params:
+    # st.query_params returns scalar strings; keep the whole value (don't index a char)
+    user_id = st.query_params['user_id']
+    st.session_state.user_id = user_id
+elif 'user_id' in st.session_state:
+    user_id = st.session_state.user_id
 else:
     st.error('No user_id provided')
     st.stop()
 
 result = get_list_of_train_data_id(user_id)
+
+if not result['train_id']:
+    st.warning('No completed forecasting runs found for this user.')
+    st.stop()
 
 col1, col2, _ = st.columns([1, 1, 3])
 with col1:
@@ -27,7 +39,7 @@ data_dp_id = result['data_dp_id'][result['train_id'].index(train_id)]
 
 data = get_data(data_ing_id, data_dp_id)
 with col2:
-    ts_id = st.selectbox("Select Time Series", data['ts_id'].unique())
+    ts_id = st.selectbox("Select Time Series", sorted(data['ts_id'].unique()))
 
 st.markdown('#### Actual and Corrected history')
 
@@ -87,22 +99,6 @@ fig = px.histogram(performance_metrics_data,
 st.plotly_chart(fig, use_container_width=True)
 
 
-def ks_metric(val):
-    if val < 0.05:
-        return 'Yes'
-    else:
-        return 'No'
-
-
-def psi_metric(val):
-    if val < 0.1:
-        return 'No'
-    elif val < 0.2:
-        return 'Slight'
-    else:
-        return 'Extreme'
-
-
 st.markdown('#### Data Drift Metrics')
 col1, _ = st.columns([1, 4])
 with col1:
@@ -111,7 +107,7 @@ with col1:
                                           'metric_name'].unique())
 data_drift_metrics_data = metric_data[metric_data['metric_name'].isin(['psi', 'ks'])]
 data_drift_metrics_data = data_drift_metrics_data[(data_drift_metrics_data['ts_id'] == ts_id)
-                                                  & (data_drift_metrics_data['metric_name'] == data_drift_metrics)]
+                                                  & (data_drift_metrics_data['metric_name'] == data_drift_metrics)].copy()
 if data_drift_metrics == 'ks':
     data_drift_metrics_data['metric_value'] = data_drift_metrics_data['metric_value'].map(ks_metric)
 else:
@@ -136,7 +132,9 @@ score_data = metric_data[(metric_data['ts_id'] == ts_id) & (~metric_data['metric
 score_data = pd.pivot_table(score_data, index=['split_no', 'split_window', 'model_name'],
                             columns='metric_name', values='metric_value')
 score_data.reset_index(inplace=True)
-score_data['key'] = score_data['split_no'].map(str) + '_' + score_data['split_window']
+# astype(str) (not map(str)) so the key stays string-typed even when score_data is
+# empty -- map(str) preserves int64 on an empty series and breaks the concatenation.
+score_data['key'] = score_data['split_no'].astype(str) + '_' + score_data['split_window'].astype(str)
 temp = pd.DataFrame()
 
 list_of_performance_metrics = metric_data[~metric_data['metric_name'].isin(['psi', 'ks'])]['metric_name'].unique()
@@ -150,7 +148,7 @@ for k in score_data['key'].unique():
     sub_score_data['score'] = sub_score_data[list_of_performance_metrics].mean(axis=1)
     sub_score_data.drop(columns=list_of_performance_metrics, inplace=True)
     sub_score_data.drop(columns=['key'], inplace=True)
-    temp = temp.append(sub_score_data)
+    temp = pd.concat([temp, sub_score_data], ignore_index=True)
 
 score_data = temp.copy()
 
@@ -166,26 +164,12 @@ col1, col2, col3 = st.columns([1, 1, 1])
 
 with col1:
     st.markdown('#### Top 3 Stable Models')
-    stable_model = score_data.groupby(['split_window', 'model_name']).std().reset_index().copy()
+    stable_model = score_data.groupby(['split_window', 'model_name']).std(numeric_only=True).reset_index().copy()
     stable_model = stable_model.sort_values(by=['score'], ascending=True)
     st.table(stable_model.head(3).reset_index(drop=True)[['split_window', 'model_name']])
 
 with col2:
     st.markdown('#### Top 3 Continuous Improving Models')
-
-
-    def check_improvement(x):
-        values = x.values
-        if len(values) > 1:
-            calc = [1 if values[k] >= values[k + 1] else -1 for k in range(len(values) - 1)]
-            calc = sum(calc)
-            if calc > 0:
-                return calc
-            else:
-                return 0
-        else:
-            return values
-
 
     score_data.sort_values(by=['split_window', 'model_name', 'split_no'], ascending=True, inplace=True)
     performing_model = score_data.groupby(['split_window', 'model_name']).agg({'score': check_improvement}).reset_index().copy()
@@ -195,7 +179,7 @@ with col2:
 
 with col3:
     st.markdown('#### Top 3 Models Lowest Average Score')
-    average_models = score_data.groupby(['split_window', 'model_name']).mean().reset_index().copy()
+    average_models = score_data.groupby(['split_window', 'model_name']).mean(numeric_only=True).reset_index().copy()
     average_models = average_models.sort_values(by=['score'], ascending=True)
     st.table(average_models.head(3).reset_index(drop=True)[['split_window', 'model_name']])
 

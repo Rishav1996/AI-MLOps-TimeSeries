@@ -1,13 +1,16 @@
+"""Population Stability Index (PSI): distribution-drift between two samples."""
 import numpy as np
 
 
 def metric_loss(expected, actual, bucket_type='bins', buckets=10, axis=0):
-
+    """Return the PSI between expected and actual arrays (higher = more drift)."""
     expected = np.array(expected).flatten()
     actual = np.array(actual).flatten()
 
     def psi(expected_array, actual_array, no_of_buckets):
+        """Compute PSI for a single pair of 1-D arrays over no_of_buckets bins."""
         def scale_range(input, min, max):
+            """Linearly rescale input array to the [min, max] range."""
             input += -(np.min(input))
             input /= np.max(input) / (max - min)
             input += min
@@ -24,7 +27,7 @@ def metric_loss(expected, actual, bucket_type='bins', buckets=10, axis=0):
         actual_percents = np.histogram(actual_array, breakpoints)[0] / len(actual_array)
 
         def sub_psi(e_perc, a_perc):
-
+            """PSI contribution for a single bucket; clamps zero percents to 0.0001."""
             if a_perc == 0:
                 a_perc = 0.0001
             if e_perc == 0:
