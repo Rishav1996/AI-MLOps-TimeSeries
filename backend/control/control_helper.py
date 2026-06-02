@@ -43,6 +43,7 @@ def normalize_period(period_series):
     value consistent with the forecast output (and the 10-char column).
     """
     def _parse(value):
+        """Parse a single date string, choosing dayfirst based on detected format."""
         value = str(value).strip()
         return pd.to_datetime(value, dayfirst=not bool(_ISO_DATE_RE.match(value)))
 
