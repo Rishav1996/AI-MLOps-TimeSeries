@@ -47,6 +47,21 @@ def test_single_model_forecast(monthly_series, fh, module):
     assert not np.isnan(values).any()
 
 
+@pytest.fixture
+def constant_series(monthly_index):
+    """A flat (constant-valued) series -- an edge case that breaks naive Box-Cox/ETS."""
+    return pd.DataFrame({"value": np.full(48, 7.0)}, index=monthly_index)
+
+
+@pytest.mark.parametrize("module", SINGLE_MODELS, ids=lambda m: m.__name__.split(".")[-1])
+def test_single_model_handles_constant_series(constant_series, fh, module):
+    # must not raise (e.g. ETS Box-Cox "Data must not be constant") and must return a forecast
+    forecast = module.model(constant_series.copy(), fh)
+    values = np.asarray(forecast, dtype=float).flatten()
+    assert len(values) == HORIZON
+    assert not np.isnan(values).any()
+
+
 @pytest.mark.parametrize("module", [ensemble_model, auto_ensemble_model],
                          ids=lambda m: m.__name__.split(".")[-1])
 def test_ensemble_model_forecast(monthly_series, fh, module):
